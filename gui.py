@@ -8,7 +8,6 @@ from tkinter import filedialog, messagebox, ttk
 import customtkinter as ctk
 import pandas as pd
 
-# Import conversion functions and version from convert_dpost
 try:
     from convert_dpost import process_pdf, records_to_dataframe, __version__
 except ImportError:
@@ -16,159 +15,32 @@ except ImportError:
     def process_pdf(path): return []
     def records_to_dataframe(records): return pd.DataFrame()
 
-# Set ctk options
-ctk.set_appearance_mode("dark")  # Modes: "System", "Dark", "Light"
-ctk.set_default_color_theme("blue")  # Themes: "blue", "green", "dark-blue"
+ctk.set_appearance_mode("light")
 
-class StdoutRedirector:
-    """Redirects stdout to a customtkinter CTkTextbox widget with pretty icon prefixing."""
-    def __init__(self, text_widget):
-        self.text_widget = text_widget
-
-    def write(self, string):
-        if not string.strip():
-            return
-            
-        # Decorate logs dynamically for a premium developer feel
-        decorated = string
-        if "เริ่ม" in string:
-            decorated = f"🚀 {string}"
-        elif "เสร็จสิ้น" in string or "สำเร็จ" in string:
-            decorated = f"✅ {string}"
-        elif "เกิดข้อผิดพลาด" in string or "ล้มเหลว" in string:
-            decorated = f"❌ {string}"
-        elif "ประมวลผลไฟล์" in string:
-            decorated = f"📂 {string}"
-        else:
-            decorated = f"ℹ️ {string}"
-            
-        self.text_widget.configure(state='normal')
-        self.text_widget.insert('end', decorated + "\n")
-        self.text_widget.see('end')
-        self.text_widget.configure(state='disabled')
-
-    def flush(self):
-        pass
-
-class DuplicateConfirmDialog(ctk.CTkToplevel):
-    """Custom styled confirmation dialog for duplicate receiver detection."""
-    def __init__(self, parent, dup_rows):
-        super().__init__(parent)
-        self.result = False
-        self.title("⚠️ พบข้อมูลผู้รับซ้ำ")
-        self.geometry("540x420")
-        self.resizable(False, False)
-        self.grab_set()  # Modal
-        self.lift()
-        self.focus_force()
-        
-        # Center on parent
-        self.update_idletasks()
-        px = parent.winfo_x() + parent.winfo_width()//2 - 270
-        py = parent.winfo_y() + parent.winfo_height()//2 - 210
-        self.geometry(f"+{px}+{py}")
-        
-        # --- Header ---
-        header = ctk.CTkFrame(self, corner_radius=0, fg_color="#b45309", height=58)
-        header.pack(fill='x')
-        header.pack_propagate(False)
-        header_inner = ctk.CTkFrame(header, fg_color="transparent")
-        header_inner.pack(fill='both', expand=True, padx=20, pady=10)
-        ctk.CTkLabel(header_inner, text="⚠️ พบข้อมูลผู้รับซ้ำ",
-                     font=("Segoe UI", 15, "bold"), text_color="#fff7ed").pack(side='left')
-        ctk.CTkLabel(header_inner, text=f"{len(dup_rows)} รายการ",
-                     font=("Segoe UI", 12), text_color="#fed7aa").pack(side='right')
-        
-        # --- Body ---
-        body = ctk.CTkFrame(self, fg_color="transparent")
-        body.pack(fill='both', expand=True, padx=20, pady=15)
-        
-        ctk.CTkLabel(body,
-                     text=f"ค้นพบรายการผู้รับที่ซ้ำกับข้อมูลเดิม {len(dup_rows)} รายการ ดังนี้:",
-                     font=("Segoe UI", 11), text_color=("#0f172a", "#f8fafc"),
-                     justify="left", anchor="w").pack(anchor='w', pady=(0, 8))
-        
-        # Scrollable list of duplicate names
-        list_frame = ctk.CTkScrollableFrame(body, height=180,
-                                            fg_color=("#f1f5f9", "#1e293b"),
-                                            corner_radius=8)
-        list_frame.pack(fill='x')
-        
-        for i, row in enumerate(dup_rows[:20]):
-            row_bg = ("#e2e8f0", "#273548") if i % 2 == 0 else ("#f1f5f9", "#1e293b")
-            item = ctk.CTkFrame(list_frame, fg_color=row_bg, corner_radius=4, height=32)
-            item.pack(fill='x', pady=1)
-            item.pack_propagate(False)
-            ctk.CTkLabel(item, text=f"•  {row['RECEIVER']}",
-                         font=("Segoe UI", 10, "bold"),
-                         text_color=("#0f172a", "#f8fafc"),
-                         anchor="w").pack(side='left', padx=10)
-            addr_short = str(row['RECEIVER_ADDRESS'])[:50]
-            ctk.CTkLabel(item, text=addr_short,
-                         font=("Segoe UI", 9),
-                         text_color=("#64748b", "#94a3b8"),
-                         anchor="e").pack(side='right', padx=10)
-        
-        if len(dup_rows) > 20:
-            ctk.CTkLabel(list_frame, text=f"  ...และอีก {len(dup_rows)-20} รายการ",
-                         font=("Segoe UI", 9, "italic"),
-                         text_color=("#64748b", "#94a3b8")).pack(anchor='w', padx=10, pady=4)
-        
-        ctk.CTkLabel(body, text="ต้องการเพิ่มรายการที่ซ้ำเข้าไปด้วยหรือไม่?",
-                     font=("Segoe UI", 11, "bold"),
-                     text_color=("#0f172a", "#f8fafc")).pack(anchor='w', pady=(10, 0))
-        
-        # --- Buttons ---
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill='x', padx=20, pady=(0, 16))
-        
-        ctk.CTkButton(btn_frame, text=" ✔️ ใช่ — เพิ่มทั้งหมด ",
-                      fg_color="#d97706", hover_color="#b45309",
-                      font=("Segoe UI", 11, "bold"), height=36,
-                      command=self._on_yes).pack(side='right', padx=(8, 0))
-        
-        ctk.CTkButton(btn_frame, text=" ❌ ไม่ — เพิ่มเฉพาะรายการใหม่ ",
-                      fg_color=("#e2e8f0", "#334155"),
-                      hover_color=("#cbd5e1", "#475569"),
-                      text_color=("#0f172a", "#f8fafc"),
-                      font=("Segoe UI", 11, "bold"), height=36,
-                      command=self._on_no).pack(side='right')
-        
-        self.protocol("WM_DELETE_WINDOW", self._on_no)
-        self.wait_window()
-
-    def _on_yes(self):
-        self.result = True
-        self.destroy()
-
-    def _on_no(self):
-        self.result = False
-        self.destroy()
-
+# Colors matching the user's screenshot
+COLOR_PRIMARY = "#15803d"      # Dark green (Header, primary buttons)
+COLOR_SUCCESS = "#16a34a"      # Green
+COLOR_BG = "#f8fafc"           # Very light gray for app background
+COLOR_CARD = "#ffffff"         # White for cards
+COLOR_BORDER = "#cbd5e1"       # Light gray border
+COLOR_TEXT_MAIN = "#0f172a"    # Dark slate for main text
+COLOR_TEXT_MUTED = "#64748b"   # Muted slate
 
 class DPostConverterGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
-        
         self.title(f"Convert PDF To Excel v{__version__}")
-        self.geometry("1100x780")
-        self.minsize(950, 720)
+        self.geometry("1300x800")
+        self.configure(fg_color=COLOR_BG)
         
         self.selected_files = []
         self.parsed_records = []
         self.dataframe = None
-        self._append_mode = False  # Flag for append vs replace conversion
-
-        # Build UI layout
+        self.current_theme = "light"
+        
         self.create_layout()
+        self.style_treeview()
         
-        # Set initial active step
-        self.set_current_step(1)
-        
-        # Redirect stdout
-        sys.stdout = StdoutRedirector(self.log_text)
-        
-        # Setup keyboard shortcuts for advanced UX
         self.bind("<Control-o>", lambda e: self.select_files())
         self.bind("<Control-O>", lambda e: self.select_files())
         self.bind("<Control-s>", lambda e: self.export_excel_shortcut())
@@ -176,267 +48,143 @@ class DPostConverterGUI(ctk.CTk):
         self.bind("<Escape>", self.on_escape_press)
 
     def create_layout(self):
-        # 1. Header Banner
-        header = ctk.CTkFrame(self, corner_radius=0, fg_color="#1e293b", height=65)
+        # 1. Header Banner (Green)
+        header = ctk.CTkFrame(self, fg_color=COLOR_PRIMARY, corner_radius=0, height=60)
         header.pack(fill='x', side='top')
         header.pack_propagate(False)
         
-        # Center container in header for nice padding
-        header_content = ctk.CTkFrame(header, fg_color="transparent")
-        header_content.pack(fill='both', expand=True, padx=25, pady=10)
+        ctk.CTkLabel(header, text="กรมที่ดิน", font=("Segoe UI", 18, "bold"), text_color="#ffffff").pack(side='left', padx=30)
         
-        title_lbl = ctk.CTkLabel(header_content, text=f"Convert PDF To Excel v{__version__}", 
-                                 font=("Segoe UI", 18, "bold"), text_color="#f8fafc")
-        title_lbl.pack(anchor='w', side='left')
+        # Steps Indicator
+        steps_frame = ctk.CTkFrame(header, fg_color="transparent")
+        steps_frame.pack(side='right', padx=30)
         
-        # Theme toggle switch on the right side of header
-        self.switch_theme = ctk.CTkSwitch(header_content, text="โหมดมืด (Dark Mode)", 
-                                           font=("Segoe UI", 10, "bold"), text_color="#cbd5e1",
-                                           command=self.toggle_theme)
-        self.switch_theme.select() # Default to dark mode selected
-        self.switch_theme.pack(anchor='e', side='right', padx=10)
-
-        # 2. Sub-header Instruction Bar (Step-by-step guidance)
-        instruction_bar = ctk.CTkFrame(self, corner_radius=8, border_width=1, border_color=("#cbd5e1", "#334155"))
-        instruction_bar.pack(fill='x', padx=20, pady=(15, 0))
+        ctk.CTkLabel(steps_frame, text="💡 ขั้นตอนการทำงาน:", font=("Segoe UI", 12), text_color="#ffffff").pack(side='left', padx=(0, 15))
         
-        center_frame = ctk.CTkFrame(instruction_bar, fg_color="transparent")
-        center_frame.pack(anchor='center', pady=8)
+        self.lbl_step1 = ctk.CTkLabel(steps_frame, text=" [1] เลือกไฟล์ PDF ", font=("Segoe UI", 11, "bold"), text_color="#ffffff", fg_color="#166534", corner_radius=6)
+        self.lbl_step1.pack(side='left', padx=5, ipady=3)
+        ctk.CTkLabel(steps_frame, text="➔", font=("Segoe UI", 12), text_color="#86efac").pack(side='left', padx=2)
         
-        icon_lbl = ctk.CTkLabel(center_frame, text="💡 ขั้นตอนการทำงาน:", font=("Segoe UI", 11, "bold"), text_color="#38bdf8")
-        icon_lbl.pack(side='left', padx=(0, 10))
+        self.lbl_step2 = ctk.CTkLabel(steps_frame, text=" [2] พรีวิวข้อมูล ", font=("Segoe UI", 11, "bold"), text_color="#ffffff", fg_color="#166534", corner_radius=6)
+        self.lbl_step2.pack(side='left', padx=5, ipady=3)
+        ctk.CTkLabel(steps_frame, text="➔", font=("Segoe UI", 12), text_color="#86efac").pack(side='left', padx=2)
         
-        self.lbl_step1 = ctk.CTkLabel(center_frame, text=" [1] เลือกไฟล์ PDF (หรือโฟลเดอร์) ", font=("Segoe UI", 11, "bold"), text_color=("#64748b", "#94a3b8"), padx=8, pady=3)
-        self.lbl_step1.pack(side='left')
+        self.lbl_step3 = ctk.CTkLabel(steps_frame, text=" [3] บันทึกไฟล์ Excel ", font=("Segoe UI", 11, "bold"), text_color="#14532d", fg_color="#86efac", corner_radius=6)
+        self.lbl_step3.pack(side='left', padx=5, ipady=3)
         
-        arrow1 = ctk.CTkLabel(center_frame, text=" ➔ ", font=("Segoe UI", 11), text_color="#64748b")
-        arrow1.pack(side='left')
-        
-        self.lbl_step2 = ctk.CTkLabel(center_frame, text=" [2] เริ่มแปลงข้อมูล (ขวาบน) ", font=("Segoe UI", 11, "bold"), text_color=("#64748b", "#94a3b8"), padx=8, pady=3)
-        self.lbl_step2.pack(side='left')
-        
-        arrow2 = ctk.CTkLabel(center_frame, text=" ➔ ", font=("Segoe UI", 11), text_color="#64748b")
-        arrow2.pack(side='left')
-        
-        self.lbl_step3 = ctk.CTkLabel(center_frame, text=" [3] บันทึกไฟล์ Excel... (ขวาล่าง) ", font=("Segoe UI", 11, "bold"), text_color=("#64748b", "#94a3b8"), padx=8, pady=3)
-        self.lbl_step3.pack(side='left')
-
-        # 3. Main Container
+        # Main Container
         container = ctk.CTkFrame(self, fg_color="transparent")
         container.pack(fill='both', expand=True, padx=20, pady=15)
-        
-        # Grid config
         container.columnconfigure(0, weight=1)
-        container.rowconfigure(0, weight=0) # File Selection Card
-        container.rowconfigure(1, weight=3) # Preview Table Card
-        container.rowconfigure(2, weight=2) # Log & Export Card
-
-        # --- Card 1: File Selection & Controls ---
-        card_files = ctk.CTkFrame(container, corner_radius=10, border_width=1, border_color=("#cbd5e1", "#334155"))
-        card_files.grid(row=0, column=0, sticky='nsew', pady=(0, 10))
+        container.rowconfigure(1, weight=1)
         
-        ctk.CTkLabel(card_files, text="1. เลือกเอกสาร PDF", font=("Segoe UI", 12, "bold"), 
-                     text_color=("#0f172a", "#f8fafc")).pack(anchor='w', padx=20, pady=(12, 5))
+        # Card 1: File Selection
+        card_files = ctk.CTkFrame(container, fg_color=COLOR_CARD, corner_radius=10, border_width=1, border_color=COLOR_BORDER)
+        card_files.grid(row=0, column=0, sticky='nsew', pady=(0, 15))
+        
+        ctk.CTkLabel(card_files, text="1. เลือกเอกสาร PDF", font=("Segoe UI", 12, "bold"), text_color=COLOR_TEXT_MAIN).pack(anchor='w', padx=20, pady=(12, 5))
         
         btn_frame = ctk.CTkFrame(card_files, fg_color="transparent")
-        btn_frame.pack(fill='x', padx=20, pady=(5, 10))
+        btn_frame.pack(fill='x', padx=20, pady=(5, 12))
         
-        self.btn_select_files = ctk.CTkButton(btn_frame, text=" 📄 เลือกไฟล์ PDF... ", fg_color="#0284c7", hover_color="#0369a1",
-                                              font=("Segoe UI", 11, "bold"), command=self.select_files, width=170)
+        self.btn_select_files = ctk.CTkButton(btn_frame, text=" ➕ เพิ่มไฟล์ (Append) ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
+                                                font=("Segoe UI", 12, "bold"), command=self.select_files, width=150, height=36)
         self.btn_select_files.pack(side='left', padx=(0, 10))
         
-        self.btn_append_files = ctk.CTkButton(btn_frame, text=" ➕ เพิ่มไฟล์ PDF... ", fg_color="#7c3aed", hover_color="#6d28d9",
-                                              font=("Segoe UI", 11, "bold"), command=self.append_files, width=170, state='disabled')
-        self.btn_append_files.pack(side='left', padx=(0, 10))
+        self.btn_clear = ctk.CTkButton(btn_frame, text=" 🧹 ล้างข้อมูล ", fg_color="#f1f5f9", hover_color="#e2e8f0", text_color="#475569",
+                                         font=("Segoe UI", 12, "bold"), command=self.clear_selection, width=100, height=36)
+        self.btn_clear.pack(side='left')
         
-        self.btn_clear = ctk.CTkButton(btn_frame, text=" 🧹 ล้างข้อมูล ", fg_color="#475569", hover_color="#334155",
-                                       font=("Segoe UI", 11, "bold"), command=self.clear_selection, width=110)
-        self.btn_clear.pack(side='left', padx=(0, 20))
+        self.lbl_status = ctk.CTkLabel(btn_frame, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 12), text_color=COLOR_PRIMARY)
+        self.lbl_status.pack(side='left', fill='x', expand=True, anchor='center')
         
-        self.lbl_status = ctk.CTkLabel(btn_frame, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 11, "italic"), text_color=("#475569", "#94a3b8"))
-        self.lbl_status.pack(side='left', fill='x', expand=True, anchor='w')
+        self.btn_export = ctk.CTkButton(btn_frame, text=" ✖ บันทึกไฟล์ Excel... ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
+                                        font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=170, height=36)
+        self.btn_export.pack(side='right')
         
-        self.btn_convert = ctk.CTkButton(btn_frame, text=" ⚡ เริ่มแปลงข้อมูล ", fg_color="#0f766e", hover_color="#0d9488",
-                                         font=("Segoe UI", 11, "bold"), command=self.start_conversion, state='disabled', width=170)
-        self.btn_convert.pack(side='right')
-
-        # Progress bar
-        self.progress = ctk.CTkProgressBar(card_files, progress_color="#0f766e", height=8)
-        self.progress.pack(fill='x', padx=20, pady=(0, 12))
-        self.progress.set(0)
-
-        # --- Card 2: Preview Table ---
-        card_preview = ctk.CTkFrame(container, corner_radius=10, border_width=1, border_color=("#cbd5e1", "#334155"))
-        card_preview.grid(row=1, column=0, sticky='nsew', pady=(0, 10))
+        self.progress = ctk.CTkProgressBar(card_files, progress_color=COLOR_PRIMARY, height=6)
         
-        # Header frame with real-time search box
+        # Card 2: Preview Table
+        card_preview = ctk.CTkFrame(container, fg_color=COLOR_CARD, corner_radius=10, border_width=1, border_color=COLOR_BORDER)
+        card_preview.grid(row=1, column=0, sticky='nsew')
+        
         preview_header = ctk.CTkFrame(card_preview, fg_color="transparent")
-        preview_header.pack(fill='x', padx=20, pady=(10, 5))
+        preview_header.pack(fill='x', padx=20, pady=(15, 10))
         
-        title_lbl = ctk.CTkLabel(preview_header, text="2. ตารางตัวอย่างข้อมูลหลังสกัด (Preview)", font=("Segoe UI", 12, "bold"), 
-                                 text_color=("#0f172a", "#f8fafc"))
-        title_lbl.pack(side='left')
+        ctk.CTkLabel(preview_header, text="2. ตารางตัวอย่างข้อมูลหลังสกัด (Preview)", font=("Segoe UI", 12, "bold"), text_color=COLOR_TEXT_MAIN).pack(side='left')
         
-        self.search_entry = ctk.CTkEntry(preview_header, placeholder_text=" 🔍 ค้นหาผู้รับ / ผู้ส่ง / เลขอ้างอิง... ", 
-                                         width=300, height=28, font=("Segoe UI", 11))
-        self.search_entry.pack(side='right')
+        # Right aligned stats and search
+        self.search_entry = ctk.CTkEntry(preview_header, placeholder_text=" 🔍 ค้นหาผู้รับ / เลขอ้างอิง... ", width=250, height=30, font=("Segoe UI", 11), corner_radius=15)
+        self.search_entry.pack(side='right', padx=(15, 0))
+        
+        self.lbl_stat_records = ctk.CTkLabel(preview_header, text="👥 รายการผู้รับ: 0 รายการ", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
+        self.lbl_stat_records.pack(side='right', padx=10)
+        
+        self.lbl_stat_files = ctk.CTkLabel(preview_header, text="📄 ไฟล์ PDF: 0 ไฟล์", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
+        self.lbl_stat_files.pack(side='right', padx=10)
+        
         self.search_entry.bind("<KeyRelease>", self.filter_treeview)
         self.search_entry.bind("<Escape>", self.clear_search)
-
-        table_frame = ctk.CTkFrame(card_preview, fg_color="transparent")
-        table_frame.pack(fill='both', expand=True, padx=20, pady=(0, 15))
         
-        # Scrollbars for Treeview
+        # Treeview in a standard tk.Frame so it expands correctly
+        table_frame = tk.Frame(card_preview, bg=COLOR_CARD)
+        table_frame.pack(fill='both', expand=True, padx=20, pady=(0, 20))
+        
         vsb = ttk.Scrollbar(table_frame, orient="vertical")
         hsb = ttk.Scrollbar(table_frame, orient="horizontal")
         
-        # Setup Styles for treeview
-        self.preview_cols = ["NO", "INV_NO", "RECEIVER", "RECEIVER_ADDRESS", "RECEIVER_ZIPCODE"]
-        col_widths = {"NO": 50, "INV_NO": 130, "RECEIVER": 180, "RECEIVER_ADDRESS": 450, "RECEIVER_ZIPCODE": 110}
-        col_titles = {"NO": "ลำดับ", "INV_NO": "เลขที่อ้างอิง", "RECEIVER": "ผู้รับ", "RECEIVER_ADDRESS": "ที่อยู่ผู้รับ (ที่อยู่ / อำเภอ / จังหวัด)", "RECEIVER_ZIPCODE": "รหัสไปรษณีย์"}
-        
-        self.tree = ttk.Treeview(table_frame, columns=self.preview_cols, show="headings", 
-                                 yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        
+        self.tree = ttk.Treeview(table_frame, selectmode="extended", yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         vsb.config(command=self.tree.yview)
         hsb.config(command=self.tree.xview)
         
-        for col in self.preview_cols:
-            self.tree.heading(col, text=col_titles[col], anchor='w')
-            self.tree.column(col, width=col_widths[col], minwidth=50, anchor='w')
-            
         vsb.pack(side='right', fill='y')
         hsb.pack(side='bottom', fill='x')
         self.tree.pack(side='left', fill='both', expand=True)
+        
+        self.columns = [
+            ("No", "ลำดับ", 50),
+            ("Ref", "เลขที่อ้างอิง", 120),
+            ("Receiver", "ผู้รับ", 180),
+            ("Address", "ที่อยู่ผู้รับ (ที่อยู่ / อำเภอ / จังหวัด)", 450),
+            ("Zip", "รหัสไปรษณีย์", 100)
+        ]
+        
+        self.tree["columns"] = [col[0] for col in self.columns]
+        self.tree["show"] = "headings"
+        
+        for col_id, col_name, col_width in self.columns:
+            self.tree.heading(col_id, text=col_name, command=lambda _col=col_id: self.sort_treeview(_col, False))
+            self.tree.column(col_id, width=col_width, minwidth=50, anchor='w' if col_id in ["Receiver", "Address"] else 'center')
+            
+        self.set_step(1)
 
-        # Style Treeview initially for dark mode
-        self.style_treeview("dark")
-
-        # --- Card 3: Log console & Save Action ---
-        card_footer = ctk.CTkFrame(container, fg_color="transparent")
-        card_footer.grid(row=2, column=0, sticky='nsew')
-        card_footer.columnconfigure(0, weight=2) # Log console
-        card_footer.columnconfigure(1, weight=1) # Export Panel
-        card_footer.rowconfigure(0, weight=1)
-        
-        # Card 3a: Logs
-        log_frame = ctk.CTkFrame(card_footer, corner_radius=10, border_width=1, border_color=("#cbd5e1", "#334155"))
-        log_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
-        
-        ctk.CTkLabel(log_frame, text="3. รายละเอียดการทำงาน (Log)", font=("Segoe UI", 12, "bold"), 
-                     text_color=("#0f172a", "#f8fafc")).pack(anchor='w', padx=20, pady=(12, 5))
-        
-        self.log_text = ctk.CTkTextbox(log_frame, state='disabled', fg_color=("#f1f5f9", "#0f172a"), text_color=("#0f172a", "#38bdf8"), 
-                                       font=("Consolas", 11), corner_radius=6)
-        self.log_text.pack(fill='both', expand=True, padx=20, pady=(0, 15))
-        
-        # Card 3b: Export panel
-        export_frame = ctk.CTkFrame(card_footer, corner_radius=10, border_width=1, border_color=("#cbd5e1", "#334155"))
-        export_frame.grid(row=0, column=1, sticky='nsew')
-        
-        ctk.CTkLabel(export_frame, text="4. นำออกไฟล์ Excel", font=("Segoe UI", 12, "bold"), 
-                     text_color=("#0f172a", "#f8fafc")).pack(anchor='w', padx=20, pady=(12, 5))
-        
-        export_inner = ctk.CTkFrame(export_frame, fg_color="transparent")
-        export_inner.pack(fill='both', expand=True, padx=20, pady=10)
-        
-        # Stats summary dashboard frame
-        self.stats_frame = ctk.CTkFrame(export_inner, fg_color=("#f1f5f9", "#1e293b"), corner_radius=6)
-        self.stats_frame.pack(fill='x', pady=(0, 10))
-        
-        self.lbl_stat_files = ctk.CTkLabel(self.stats_frame, text="📂 ไฟล์ PDF: 0 ไฟล์", font=("Segoe UI", 11, "bold"), text_color=("#475569", "#cbd5e1"))
-        self.lbl_stat_files.pack(anchor='w', padx=15, pady=(8, 3))
-        
-        self.lbl_stat_records = ctk.CTkLabel(self.stats_frame, text="👥 รายการผู้รับ: 0 รายการ", font=("Segoe UI", 11, "bold"), text_color=("#475569", "#cbd5e1"))
-        self.lbl_stat_records.pack(anchor='w', padx=15, pady=3)
-        
-        self.lbl_stat_prov = ctk.CTkLabel(self.stats_frame, text="📍 ส่งบ่อยสุด: -", font=("Segoe UI", 11, "bold"), text_color=("#475569", "#cbd5e1"))
-        self.lbl_stat_prov.pack(anchor='w', padx=15, pady=(3, 8))
-        
-        self.btn_export = ctk.CTkButton(export_inner, text=" 📥 ดาวน์โหลด ", fg_color="#16a34a", hover_color="#15803d",
-                                        font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', height=45)
-        self.btn_export.pack(fill='x', pady=(5, 5))
-        
-        self.lbl_export_status = ctk.CTkLabel(export_inner, text="กรุณาแปลงข้อมูลก่อนบันทึก", 
-                                              font=("Segoe UI", 11, "italic"), text_color=("#475569", "#94a3b8"))
-        self.lbl_export_status.pack(fill='x', side='bottom', pady=5)
-
-    def style_treeview(self, mode):
-        """Dynamic styling for the standard ttk.Treeview depending on the active theme."""
+    def style_treeview(self):
         style = ttk.Style()
         style.theme_use('clam')
         
-        if mode == "dark":
-            bg = "#1e293b"          # Dark slate
-            fg = "#f8fafc"          # Light text
-            headings_bg = "#334155" # Slate 700
-            selected_bg = "#475569" # Slate 600
-        else:
-            bg = "#ffffff"          # White
-            fg = "#0f172a"          # Dark slate text
-            headings_bg = "#cbd5e1" # Slate 200
-            selected_bg = "#94a3b8" # Slate 400
+        bg = "#ffffff"
+        fg = "#0f172a"
+        headings_bg = "#f1f5f9"
+        selected_bg = "#e2e8f0"
             
-        style.configure('Treeview', 
-                        background=bg, 
-                        foreground=fg, 
-                        rowheight=26, 
-                        fieldbackground=bg, 
-                        font=('Segoe UI', 9))
-        style.map('Treeview', 
-                  background=[('selected', selected_bg)], 
-                  foreground=[('selected', '#ffffff')])
+        style.configure('Treeview', background=bg, foreground=fg, rowheight=28, 
+                        fieldbackground=bg, borderwidth=0, font=('Segoe UI', 10))
+        style.map('Treeview', background=[('selected', selected_bg)], foreground=[('selected', '#0f172a')])
         
-        style.configure('Treeview.Heading', 
-                        background=headings_bg, 
-                        foreground=fg, 
-                        font=('Segoe UI', 9, 'bold'),
-                        relief='flat')
+        style.configure('Treeview.Heading', background=headings_bg, foreground=fg, 
+                        font=('Segoe UI', 11, 'bold'), borderwidth=1, relief="flat", padding=(5, 5))
+        style.map('Treeview.Heading', background=[('active', '#e2e8f0')])
 
-    def set_current_step(self, step):
-        """Highlights the active step label and dims inactive steps."""
-        for s_num, lbl in {1: self.lbl_step1, 2: self.lbl_step2, 3: self.lbl_step3}.items():
-            if s_num == step:
-                # Active style: Light blue capsule background, dark text
-                lbl.configure(text_color="#0f172a", fg_color="#38bdf8", corner_radius=6)
-            else:
-                # Inactive style: Muted gray text, transparent background
-                lbl.configure(text_color=("#64748b", "#94a3b8"), fg_color="transparent")
-
-    def toggle_theme(self):
-        """Toggles between Dark and Light appearance modes."""
-        if self.switch_theme.get() == 1:
-            ctk.set_appearance_mode("dark")
-            self.style_treeview("dark")
-            self.switch_theme.configure(text="โหมดมืด (Dark Mode)")
-        else:
-            ctk.set_appearance_mode("light")
-            self.style_treeview("light")
-            self.switch_theme.configure(text="โหมดสว่าง (Light Mode)")
-
-    # --- UX Dynamic Helpers ---
-    
-    def update_stats(self):
-        """Updates the mini-dashboard stats panel."""
-        file_count = len(self.selected_files)
-        rec_count = len(self.parsed_records)
+    def set_step(self, step):
+        inactive_color = "#166534"
+        active_color = "#86efac"
         
-        top_prov = "-"
-        if self.dataframe is not None and not self.dataframe.empty:
-            prov_series = self.dataframe['RECEIVER_PROVINCE'].dropna()
-            prov_series = prov_series[prov_series != ""]
-            if not prov_series.empty:
-                top_prov = prov_series.mode().iloc[0]
-                
-        self.lbl_stat_files.configure(text=f"📂 ไฟล์ PDF: {file_count} ไฟล์")
-        self.lbl_stat_records.configure(text=f"👥 รายการผู้รับ: {rec_count} รายการ")
-        self.lbl_stat_prov.configure(text=f"📍 ส่งบ่อยสุด: {top_prov}")
+        self.lbl_step1.configure(fg_color=active_color if step == 1 else inactive_color, text_color="#14532d" if step == 1 else "#ffffff")
+        self.lbl_step2.configure(fg_color=active_color if step == 2 else inactive_color, text_color="#14532d" if step == 2 else "#ffffff")
+        self.lbl_step3.configure(fg_color=active_color if step == 3 else inactive_color, text_color="#14532d" if step == 3 else "#ffffff")
 
     def filter_treeview(self, event=None):
-        """Filters the Treeview preview list in real-time based on the search query."""
         query = self.search_entry.get().strip().lower()
-        
-        # Clear current rows
         for item in self.tree.get_children():
             self.tree.delete(item)
             
@@ -444,343 +192,176 @@ class DPostConverterGUI(ctk.CTk):
             return
             
         for idx, row in self.dataframe.iterrows():
-            inv_no = str(row.get("INV_NO", "")).lower()
-            receiver = str(row.get("RECEIVER", "")).lower()
-            address = str(row.get("RECEIVER_ADDRESS", "")).lower()
-            amphur = str(row.get("RECEIVER_AMPHUR", "")).lower()
-            province = str(row.get("RECEIVER_PROVINCE", "")).lower()
-            zipcode = str(row.get("RECEIVER_ZIPCODE", "")).lower()
+            matches = False
+            if not query:
+                matches = True
+            else:
+                for col in self.dataframe.columns:
+                    if query in str(row[col]).lower():
+                        matches = True
+                        break
             
-            # Combine full address: address + amphur + province
-            parts = [str(row.get("RECEIVER_ADDRESS", "")),
-                     str(row.get("RECEIVER_AMPHUR", "")),
-                     str(row.get("RECEIVER_PROVINCE", ""))]
-            full_address = " ".join(p for p in parts if p.strip())
-            
-            if (not query) or (query in inv_no or query in receiver or query in address or query in amphur or query in province or query in zipcode):
-                values = [
-                    row.get("NO", idx+1),
-                    row.get("INV_NO", ""),
-                    row.get("RECEIVER", ""),
-                    full_address,
-                    row.get("RECEIVER_ZIPCODE", "")
-                ]
-                self.tree.insert("", "end", values=values)
+            if matches:
+                addr = f"{row.get('RECEIVER_ADDRESS', '')} {row.get('RECEIVER_DISTRICT', '')} {row.get('RECEIVER_PROVINCE', '')}".strip()
+                self.tree.insert("", "end", values=(
+                    idx + 1,
+                    row.get('REF_NO', ''),
+                    row.get('RECEIVER', ''),
+                    addr,
+                    row.get('RECEIVER_ZIPCODE', '')
+                ))
 
     def clear_search(self, event=None):
-        """Clears the search entry content and resets view."""
-        self.search_entry.delete(0, tk.END)
+        self.search_entry.delete(0, 'end')
         self.filter_treeview()
+        self.focus()
 
     def export_excel_shortcut(self):
-        """Shortcut triggered via Ctrl+S."""
-        if self.dataframe is not None and not self.dataframe.empty:
+        if self.btn_export.cget('state') == 'normal':
             self.export_excel()
 
     def on_escape_press(self, event=None):
-        """Clears search if active, otherwise clears the workspace."""
-        if self.focus_get() == self.search_entry:
+        if self.search_entry.get():
             self.clear_search()
-            self.focus_set() # Unfocus search entry
-        else:
-            self.clear_selection()
 
-    # --- Command Event Handlers ---
-    
-    def select_files(self):
-        files = filedialog.askopenfilenames(
-            title="เลือกไฟล์ PDF ใบนำส่ง DPost",
-            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
-        )
-        if files:
-            self.selected_files = list(files)
-            self.update_file_selection_status()
-
-    def select_directory(self):
-        directory = filedialog.askdirectory(title="เลือกโฟลเดอร์ที่เก็บไฟล์ PDF")
-        if directory:
-            files = glob.glob(os.path.join(directory, "*.pdf"))
-            if files:
-                self.selected_files = files
-                self.update_file_selection_status()
-            else:
-                messagebox.showwarning("ไม่พบไฟล์", "ไม่พบไฟล์ PDF ในโฟลเดอร์ที่เลือก")
-
-    def append_files(self):
-        """Opens additional PDF files and appends them to existing data with duplicate checking."""
-        files = filedialog.askopenfilenames(
-            title="เพิ่มไฟล์ PDF ใบนำส่ง DPost (Append Mode)",
-            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
-        )
-        if files:
-            # Merge new files into selected_files (avoid exact path duplicates)
-            existing = set(self.selected_files)
-            new_files = [f for f in files if f not in existing]
-            if not new_files:
-                messagebox.showinfo("ไม่มีไฟล์ใหม่", "ไฟล์ที่เลือกทั้งหมดถูกโหลดแล้ว")
-                return
-            self.selected_files.extend(new_files)
-            count = len(self.selected_files)
-            self.lbl_status.configure(
-                text=f"โหมดเพิ่มข้อมูล: ไฟล์ทั้งหมด {count} ไฟล์ (เพิ่ม {len(new_files)} ไฟล์ใหม่)",
-                text_color=("#7c3aed", "#a78bfa")
-            )
-            self._append_mode = True
-            self.btn_convert.configure(state='normal')
-            self.progress.set(0)
-            self.update_stats()
-            self.set_current_step(2)
-
-    def update_file_selection_status(self):
-        count = len(self.selected_files)
-        if count == 1:
-            name = os.path.basename(self.selected_files[0])
-            self.lbl_status.configure(text=f"เลือกไฟล์: {name}", text_color=("#0284c7", "#38bdf8"))
-        else:
-            self.lbl_status.configure(text=f"เลือกไฟล์ทั้งหมด {count} ไฟล์", text_color=("#0284c7", "#38bdf8"))
-        
-        self._append_mode = False
-        self.btn_convert.configure(state='normal')
-        self.progress.set(0)
-        self.btn_export.configure(state='disabled')
-        self.lbl_export_status.configure(text="พร้อมเริ่มแปลงข้อมูล", text_color=("#475569", "#94a3b8"))
-        
-        # Update dynamic stats panel
-        self.update_stats()
-        
-        # Transition to step 2 (ready to convert)
-        self.set_current_step(2)
+    def sort_treeview(self, col_id, reverse):
+        items = [(self.tree.set(k, col_id), k) for k in self.tree.get_children('')]
+        try:
+            items.sort(key=lambda t: float(t[0]), reverse=reverse)
+        except ValueError:
+            items.sort(reverse=reverse)
+            
+        for index, (val, k) in enumerate(items):
+            self.tree.move(k, '', index)
+        self.tree.heading(col_id, command=lambda: self.sort_treeview(col_id, not reverse))
 
     def clear_selection(self):
         self.selected_files = []
         self.parsed_records = []
         self.dataframe = None
-        self._append_mode = False
-        self._prev_file_count = 0
-        self.lbl_status.configure(text="ยังไม่ได้เลือกไฟล์", text_color="#94a3b8")
-        self.btn_select_files.configure(state='normal')  # Re-enable: data cleared
-        self.btn_convert.configure(state='disabled')
-        self.btn_append_files.configure(state='disabled')
+        self.lbl_status.configure(text="ยังไม่ได้เลือกไฟล์")
+        self.lbl_stat_files.configure(text="📄 ไฟล์ PDF: 0 ไฟล์")
+        self.lbl_stat_records.configure(text="👥 รายการผู้รับ: 0 รายการ")
+        
         self.btn_export.configure(state='disabled')
-        self.lbl_export_status.configure(text="กรุณาแปลงข้อมูลก่อนบันทึก", text_color=("#475569", "#94a3b8"))
-        self.progress.set(0)
+        self.btn_select_files.configure(text=" ➕ เพิ่มไฟล์ (Append) ")
         
-        # Clear search box
-        self.search_entry.delete(0, tk.END)
-        
-        # Reset stats
-        self.update_stats()
-        
-        # Clear preview table
         for item in self.tree.get_children():
             self.tree.delete(item)
             
-        # Clear log text
-        self.log_text.configure(state='normal')
-        self.log_text.delete('1.0', tk.END)
-        self.log_text.configure(state='disabled')
-        
-        # Reset to step 1
-        self.set_current_step(1)
+        self.set_step(1)
 
-    def start_conversion(self):
-        # Disable buttons during work
+    def select_files(self):
+        files = filedialog.askopenfilenames(
+            title="เลือกไฟล์ PDF ใบนำส่ง DPost",
+            filetypes=[("PDF Files", "*.pdf"), ("All Files", "*.*")]
+        )
+        if files:
+            # Check for duplicates if already have files
+            new_files = [f for f in files if f not in self.selected_files]
+            if len(new_files) < len(files) and self.selected_files:
+                messagebox.showinfo("ข้อมูลซ้ำ", f"พบไฟล์ที่เลือกไปแล้ว {len(files) - len(new_files)} ไฟล์\nระบบจะเพิ่มเฉพาะไฟล์ใหม่")
+            
+            if new_files:
+                self.selected_files.extend(new_files)
+                self.lbl_status.configure(text=f"เลือกไฟล์ทั้งหมด {len(self.selected_files)} ไฟล์")
+                self.start_conversion(new_files)
+
+    def start_conversion(self, files_to_process):
         self.btn_select_files.configure(state='disabled')
-        self.btn_append_files.configure(state='disabled')
-        self.btn_convert.configure(state='disabled')
         self.btn_clear.configure(state='disabled')
+        self.btn_export.configure(state='disabled')
         
+        self.progress.pack(fill='x', padx=20, pady=(0, 12), before=self.btn_frame if hasattr(self, 'btn_frame') else None) # we'll just pack it
         self.progress.set(0)
         
-        if not self._append_mode:
-            # Replace mode: clear preview table
-            for item in self.tree.get_children():
-                self.tree.delete(item)
-            
-        # Run conversion in background thread
-        thread = threading.Thread(target=self.run_conversion_task)
+        self.set_step(2)
+        
+        thread = threading.Thread(target=self.run_conversion_task, args=(files_to_process,))
         thread.daemon = True
         thread.start()
 
-    def run_conversion_task(self):
-        try:
-            is_append = self._append_mode and self.dataframe is not None and not self.dataframe.empty
-            
-            if is_append:
-                print(f"=== เพิ่มข้อมูล (Append Mode) ({datetime.now().strftime('%H:%M:%S')}) ===")
-                # Only process the newly added files (those beyond previously processed)
-                # We detect new files as files not in already parsed set by re-scanning selected_files
-                new_records = []
-                # Find files that were NOT part of previous conversion
-                # We store a set of already-processed file paths to know which are "new"
-                prev_file_count = getattr(self, '_prev_file_count', 0)
-                new_files_to_process = self.selected_files[prev_file_count:]
-                total_new = len(new_files_to_process)
-                
-                for index, file_path in enumerate(new_files_to_process, 1):
-                    print(f"ประมวลผลไฟล์: {os.path.basename(file_path)}...")
-                    records = process_pdf(file_path)
+    def run_conversion_task(self, files_to_process):
+        new_records = []
+        total = len(files_to_process)
+        
+        for i, filepath in enumerate(files_to_process):
+            try:
+                records = process_pdf(filepath)
+                if records:
+                    for r in records:
+                        r['source_file'] = os.path.basename(filepath)
                     new_records.extend(records)
-                    percent = float(index / total_new)
-                    self.after(0, self.update_progress, percent)
-                    
-                print(f"สกัดข้อมูลใหม่เสร็จสิ้น ค้นพบข้อมูลผู้รับ {len(new_records)} รายการ")
+            except Exception as e:
+                print(f"Error processing {os.path.basename(filepath)}: {e}")
                 
-                if not new_records:
-                    self.after(0, self.conversion_failed, "ไม่พบข้อมูลใบนำส่งที่ถูกต้องในไฟล์ PDF ที่เพิ่มเข้ามา")
-                    return
-                
-                new_df = records_to_dataframe(new_records)
-                
-                # --- Duplicate Detection ---
-                existing_keys = set(
-                    zip(self.dataframe['RECEIVER'].astype(str).str.strip().str.lower(),
-                        self.dataframe['RECEIVER_ADDRESS'].astype(str).str.strip().str.lower())
-                )
-                
-                dup_rows = []
-                non_dup_rows = []
-                for _, row in new_df.iterrows():
-                    key = (str(row['RECEIVER']).strip().lower(),
-                           str(row['RECEIVER_ADDRESS']).strip().lower())
-                    if key in existing_keys:
-                        dup_rows.append(row)
-                    else:
-                        non_dup_rows.append(row)
-                
-                if dup_rows:
-                    dlg = DuplicateConfirmDialog(self, dup_rows)
-                    confirm = dlg.result
-                    if confirm:
-                        rows_to_add = non_dup_rows + dup_rows
-                    else:
-                        rows_to_add = non_dup_rows
-                else:
-                    rows_to_add = non_dup_rows
-                
-                if not rows_to_add:
-                    self.after(0, self.conversion_failed, "ไม่มีรายการใหม่ที่จะเพิ่ม (ทั้งหมดซ้ำและผู้ใช้ไม่ยืนยัน)")
-                    return
-                
-                added_df = pd.DataFrame(rows_to_add)
-                combined = pd.concat([self.dataframe, added_df], ignore_index=True)
-                # Renumber NO column
-                combined['NO'] = range(1, len(combined) + 1)
-                self.dataframe = combined
-                self.parsed_records.extend(new_records)
-                self._prev_file_count = len(self.selected_files)
-                self._append_mode = False
-                self.after(0, self.conversion_success, len(rows_to_add))
-                
-            else:
-                # Replace mode
-                print(f"=== เริ่มการแปลงข้อมูล ({datetime.now().strftime('%H:%M:%S')}) ===")
-                self.parsed_records = []
-                
-                total_files = len(self.selected_files)
-                for index, file_path in enumerate(self.selected_files, 1):
-                    print(f"ประมวลผลไฟล์: {os.path.basename(file_path)}...")
-                    records = process_pdf(file_path)
-                    self.parsed_records.extend(records)
-                    
-                    percent = float(index / total_files)
-                    self.after(0, self.update_progress, percent)
-                    
-                print(f"สกัดข้อมูลเสร็จสิ้น ค้นพบข้อมูลผู้รับทั้งหมด {len(self.parsed_records)} รายการ\n")
-                
-                if self.parsed_records:
-                    self.dataframe = records_to_dataframe(self.parsed_records)
-                    self._prev_file_count = len(self.selected_files)
-                    self.after(0, self.conversion_success)
-                else:
-                    self.after(0, self.conversion_failed, "ไม่พบข้อมูลใบนำส่งที่ถูกต้องในไฟล์ PDF ที่เลือก")
-                
-        except Exception as e:
-            print(f"เกิดข้อผิดพลาด: {str(e)}\n")
-            self.after(0, self.conversion_failed, str(e))
+            self.after(10, self.update_progress, (i + 1) / total)
+            
+        self.after(10, self.conversion_completed, new_records)
 
     def update_progress(self, val):
         self.progress.set(val)
 
-    def conversion_success(self, append_info=None):
-        # Re-enable action buttons but lock file selection to prevent data replacement
-        self.btn_select_files.configure(state='disabled')  # Lock: data already loaded
-        self.btn_append_files.configure(state='normal')
-        self.btn_convert.configure(state='normal')
-        self.btn_clear.configure(state='normal')
+    def conversion_completed(self, new_records):
+        self.progress.pack_forget()
         
-        # Refresh Treeview preview
-        self.filter_treeview()
+        if new_records:
+            new_df = records_to_dataframe(new_records)
             
-        self.btn_export.configure(state='normal')
-        total = len(self.dataframe)
-        if append_info:
-            self.lbl_export_status.configure(
-                text=f"เพิ่มข้อมูลสำเร็จ รวมทั้งหมด {total} รายการ (เพิ่ม {append_info} รายการ)",
-                text_color="#a855f7"
-            )
+            if self.dataframe is None or self.dataframe.empty:
+                self.dataframe = new_df
+            else:
+                # Merge dataframes
+                self.dataframe = pd.concat([self.dataframe, new_df], ignore_index=True)
+                
+            self.parsed_records = self.dataframe.to_dict('records')
+            
+            self.lbl_stat_files.configure(text=f"📄 ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
+            self.lbl_stat_records.configure(text=f"👥 รายการผู้รับ: {len(self.dataframe)} รายการ")
+            self.lbl_status.configure(text=f"ประมวลผลเสร็จสิ้น รวมทั้งหมด {len(self.dataframe)} รายการ")
+            
+            self.filter_treeview()
+            self.set_step(3)
         else:
-            self.lbl_export_status.configure(
-                text=f"แปลงข้อมูลสำเร็จ ค้นพบทั้งหมด {total} รายการ พร้อมนำออกไฟล์",
-                text_color="#16a34a"
-            )
+            if not self.parsed_records:
+                self.lbl_status.configure(text="ไม่พบข้อมูลในไฟล์ที่เลือก")
+                self.set_step(1)
         
-        # Update dynamic stats panel
-        self.update_stats()
-        
-        if append_info:
-            messagebox.showinfo("เพิ่มข้อมูลสำเร็จ", f"เพิ่มข้อมูลสำเร็จ {append_info} รายการ\nรวมทั้งหมด {total} รายการ")
-        else:
-            messagebox.showinfo("เสร็จสิ้น", f"แปลงข้อมูลสำเร็จทั้งหมด {total} รายการ")
-        
-        # Transition to step 3 (ready to export)
-        self.set_current_step(3)
-
-    def conversion_failed(self, error_msg):
-        # Re-enable file selection only if there is no existing data
-        has_data = self.dataframe is not None and not self.dataframe.empty
-        self.btn_select_files.configure(state='disabled' if has_data else 'normal')
-        self.btn_append_files.configure(state='normal')
-        self.btn_convert.configure(state='normal')
+        self.btn_select_files.configure(state='normal')
         self.btn_clear.configure(state='normal')
-        
-        self.btn_export.configure(state='disabled')
-        self.lbl_export_status.configure(text="การแปลงข้อมูลล้มเหลว", text_color="#dc2626")
-        
-        # Reset stats
-        self.update_stats()
-        
-        messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถแปลงข้อมูลได้:\n{error_msg}")
+        if self.dataframe is not None and not self.dataframe.empty:
+            self.btn_export.configure(state='normal')
 
     def export_excel(self):
         if self.dataframe is None or self.dataframe.empty:
-            messagebox.showwarning("ไม่มีข้อมูล", "ไม่มีข้อมูลสำหรับส่งออก")
+            messagebox.showwarning("ไม่มีข้อมูล", "กรุณาแปลงไฟล์ PDF ก่อนบันทึก")
             return
             
-        suffix = datetime.now().strftime("%Y%m%d%H%M")
-        default_name = f"dpost_import_{suffix}.xlsx"
+        default_filename = f"DPost_Export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        initial_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
         
-        downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-        if not os.path.exists(downloads_dir):
-            downloads_dir = os.path.expanduser("~")
-            
-        output_path = filedialog.asksaveasfilename(
-            title="บันทึกไฟล์ Excel สำหรับ DPost",
-            initialdir=downloads_dir,
-            initialfile=default_name,
-            filetypes=[("Excel files", "*.xlsx")],
-            defaultextension=".xlsx"
+        filepath = filedialog.asksaveasfilename(
+            title="บันทึกไฟล์ Excel",
+            initialdir=initial_dir,
+            initialfile=default_filename,
+            defaultextension=".xlsx",
+            filetypes=[("Excel Files", "*.xlsx")]
         )
         
-        if output_path:
+        if filepath:
             try:
-                self.dataframe.to_excel(output_path, sheet_name="New Order Data", index=False)
-                print(f"บันทึกไฟล์ Excel สำเร็จ: {os.path.basename(output_path)}")
-                messagebox.showinfo("บันทึกสำเร็จ", f"บันทึกไฟล์เรียบร้อยแล้วที่:\n{output_path}")
-                self.clear_selection()
+                export_df = self.dataframe.copy()
+                if 'source_file' in export_df.columns:
+                    export_df = export_df.drop('source_file', axis=1)
+                    
+                export_df.to_excel(filepath, index=False, engine='openpyxl')
+                messagebox.showinfo("สำเร็จ", f"บันทึกไฟล์เรียบร้อยแล้วที่:\n{filepath}")
+                self.lbl_status.configure(text="บันทึกไฟล์ Excel สำเร็จ")
+                
+                if sys.platform == "win32":
+                    os.startfile(filepath)
             except Exception as e:
-                print(f"ไม่สามารถบันทึกไฟล์ได้: {str(e)}")
-                messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถบันทึกไฟล์ได้:\n{str(e)}")
+                messagebox.showerror("ข้อผิดพลาด", f"ไม่สามารถบันทึกไฟล์ได้:\n{str(e)}")
 
 def main():
     app = DPostConverterGUI()
