@@ -145,13 +145,6 @@ class DPostConverterGUI(ctk.CTk):
         
         vsb.pack(side='right', fill='y')
         self.tree.pack(side='left', fill='both', expand=True)
-        self.tree.bind("<Delete>", self.delete_selected)
-        self.tree.bind("<BackSpace>", self.delete_selected)
-        
-        # Context Menu for Treeview
-        self.tree_menu = tk.Menu(self.tree, tearoff=0)
-        self.tree_menu.add_command(label="ลบข้อมูล (Delete)", command=self.delete_selected)
-        self.tree.bind("<Button-3>", self.show_tree_context_menu)
         
         self.columns = [
             ("No", "ลำดับ", 50),
@@ -222,7 +215,7 @@ class DPostConverterGUI(ctk.CTk):
                 # Clean up double spaces if any component is missing
                 addr = ' '.join(addr.split())
                 tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
-                self.tree.insert("", "end", iid=str(idx), values=(
+                self.tree.insert("", "end", values=(
                     idx + 1,
                     row.get('INV_NO', ''),
                     row.get('RECEIVER', ''),
@@ -253,50 +246,6 @@ class DPostConverterGUI(ctk.CTk):
         for index, (val, k) in enumerate(items):
             self.tree.move(k, '', index)
         self.tree.heading(col_id, command=lambda: self.sort_treeview(col_id, not reverse))
-
-    def show_tree_context_menu(self, event):
-        item = self.tree.identify_row(event.y)
-        if item:
-            if item not in self.tree.selection():
-                self.tree.selection_set(item)
-            self.tree_menu.post(event.x_root, event.y_root)
-
-    def delete_selected(self, event=None):
-        selected_items = self.tree.selection()
-        if not selected_items:
-            return
-            
-        import tkinter.messagebox as messagebox
-        if not messagebox.askyesno("ยืนยันการลบ", "คุณต้องการลบข้อมูลที่เลือกใช่หรือไม่?\\n\\n(ระบบจะนำไฟล์ PDF ต้นฉบับของข้อมูลเหล่านี้ออกจากรายการด้วย)"):
-            return
-            
-        indices_to_delete = [int(iid) for iid in selected_items]
-        
-        files_to_remove = set()
-        if 'SOURCE_FILE' in self.dataframe.columns:
-            for idx in indices_to_delete:
-                if idx in self.dataframe.index:
-                    files_to_remove.add(self.dataframe.loc[idx, 'SOURCE_FILE'])
-                    
-        if files_to_remove:
-            # Remove from selected_files
-            self.selected_files = [f for f in self.selected_files if f not in files_to_remove]
-            
-            # Remove ALL rows from dataframe that belong to these files
-            self.dataframe = self.dataframe[~self.dataframe['SOURCE_FILE'].isin(files_to_remove)]
-            
-            # Reset index of dataframe so idx matches row numbers again
-            self.dataframe.reset_index(drop=True, inplace=True)
-            self.parsed_records = self.dataframe.to_dict('records') if not self.dataframe.empty else []
-            
-            # Update UI
-            self.lbl_stat_files.configure(text=f"📄 ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
-            self.lbl_stat_records.configure(text=f"👥 รายการผู้รับ: {len(self.dataframe)} รายการ")
-            
-            if self.dataframe.empty:
-                self.clear_selection()
-            else:
-                self.filter_treeview()
 
     def show_selected_files_popup(self, event=None):
         if not self.selected_files:
