@@ -91,8 +91,9 @@ class DPostConverterGUI(ctk.CTk):
                                                 font=("Segoe UI", 12, "bold"), command=self.select_files, width=150, height=36)
         self.btn_select_files.pack(side='left', padx=(0, 10))
         
-        self.btn_clear = ctk.CTkButton(btn_frame, text=" 🧹 ล้างข้อมูล ", fg_color="#f1f5f9", hover_color="#e2e8f0", text_color="#475569",
-                                         font=("Segoe UI", 12, "bold"), command=self.clear_selection, width=100, height=36)
+        self.btn_clear = ctk.CTkButton(btn_frame, text=" 🧹 ล้างข้อมูล ", fg_color="#f1f5f9", 
+                                       hover_color="#fecaca", text_color="#ef4444",
+                                       font=("Segoe UI", 12, "bold"), command=self.clear_selection, width=100, height=36)
         self.btn_clear.pack(side='left')
         
         self.center_frame = ctk.CTkFrame(btn_frame, fg_color="transparent")
