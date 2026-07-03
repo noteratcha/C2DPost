@@ -250,6 +250,7 @@ class DPostConverterGUI(ctk.CTk):
         self.tree.heading(col_id, command=lambda: self.sort_treeview(col_id, not reverse))
 
     def open_pdf(self, event=None):
+        import tkinter.messagebox as messagebox
         selected_items = self.tree.selection()
         if not selected_items:
             return
@@ -257,15 +258,26 @@ class DPostConverterGUI(ctk.CTk):
         try:
             iid = selected_items[0]
             idx = int(iid)
-            if self.dataframe is not None and not self.dataframe.empty and 'SOURCE_FILE' in self.dataframe.columns:
-                file_path = self.dataframe.loc[idx, 'SOURCE_FILE']
-                if os.path.exists(file_path):
-                    os.startfile(file_path)
-                else:
-                    import tkinter.messagebox as messagebox
-                    messagebox.showerror("ไม่พบไฟล์", f"ไม่พบไฟล์: {file_path}")
+            
+            if self.dataframe is None or self.dataframe.empty:
+                messagebox.showwarning("ข้อผิดพลาด", "ไม่พบข้อมูลในตาราง")
+                return
+                
+            if 'SOURCE_FILE' not in self.dataframe.columns:
+                messagebox.showwarning("ข้อแนะนำ", "กรุณากดปุ่ม 'ล้างข้อมูล' และเลือกไฟล์ PDF เข้ามาใหม่อีกครั้ง เพื่อให้ระบบจำไฟล์ต้นฉบับครับ")
+                return
+                
+            file_path = self.dataframe.loc[idx, 'SOURCE_FILE']
+            if not file_path:
+                messagebox.showwarning("ข้อผิดพลาด", "ข้อมูลบรรทัดนี้ไม่มีไฟล์ต้นฉบับบันทึกไว้")
+                return
+                
+            if os.path.exists(file_path):
+                os.startfile(file_path)
+            else:
+                messagebox.showerror("ไม่พบไฟล์", f"ไม่พบไฟล์ต้นฉบับในระบบ:\n{file_path}")
         except Exception as e:
-            print(f"Error opening PDF: {e}")
+            messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถเปิดไฟล์ได้เนื่องจาก:\n{str(e)}")
 
     def show_selected_files_popup(self, event=None):
         if not self.selected_files:
