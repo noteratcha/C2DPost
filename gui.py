@@ -96,19 +96,19 @@ class DPostConverterGUI(ctk.CTk):
         self.btn_clear.pack(side='left')
         
         self.center_frame = ctk.CTkFrame(btn_frame, fg_color="transparent")
-        self.center_frame.pack(side='left', fill='both', expand=True, padx=10)
+        self.center_frame.pack(side='left', fill='both', expand=True, padx=30)
         
         self.status_box = ctk.CTkFrame(self.center_frame, fg_color="transparent", border_width=1, border_color=COLOR_BORDER, corner_radius=6)
-        self.status_box.pack(fill='x', expand=True)
+        self.status_box.pack(fill='both', expand=True)
         
         self.lbl_status = ctk.CTkLabel(self.status_box, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 12), text_color=COLOR_PRIMARY)
-        self.lbl_status.pack(fill='both', expand=True, pady=4)
+        self.lbl_status.pack(fill='both', expand=True, pady=(8, 8))
         
         self.btn_export = ctk.CTkButton(btn_frame, text=" ✖ บันทึกไฟล์ Excel... ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
                                         font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=170, height=36)
         self.btn_export.pack(side='right')
         
-        self.progress = ctk.CTkProgressBar(self.center_frame, progress_color=COLOR_PRIMARY, height=6)
+        self.progress = ctk.CTkProgressBar(self.status_box, progress_color=COLOR_PRIMARY, height=8, corner_radius=4)
         
         # Card 2: Preview Table
         card_preview = ctk.CTkFrame(container, fg_color=COLOR_CARD, corner_radius=10, border_width=1, border_color=COLOR_BORDER)
@@ -278,8 +278,10 @@ class DPostConverterGUI(ctk.CTk):
         self.btn_clear.configure(state='disabled')
         self.btn_export.configure(state='disabled')
         
-        self.progress.pack(fill='x', side='bottom', pady=(0, 5))
+        self.progress.pack(fill='x', side='bottom', padx=2, pady=(0, 2))
         self.progress.set(0)
+        self.lbl_status.configure(text="กำลังแปลงไฟล์... (0%)")
+        self.lbl_status.pack(pady=(4, 0)) # adjust padding when progress bar is visible
         
         self.set_step(2)
         
@@ -301,15 +303,18 @@ class DPostConverterGUI(ctk.CTk):
             except Exception as e:
                 print(f"Error processing {os.path.basename(filepath)}: {e}")
                 
-            self.after(10, self.update_progress, (i + 1) / total)
+            self.after(10, self.update_progress, (i + 1) / total, i + 1, total)
             
         self.after(10, self.conversion_completed, new_records)
 
-    def update_progress(self, val):
+    def update_progress(self, val, current, total):
         self.progress.set(val)
+        percent = int(val * 100)
+        self.lbl_status.configure(text=f"กำลังแปลงไฟล์... {current}/{total} ({percent}%)")
 
     def conversion_completed(self, new_records):
         self.progress.pack_forget()
+        self.lbl_status.pack(pady=(8, 8)) # restore padding
         
         if new_records:
             new_df = records_to_dataframe(new_records)
