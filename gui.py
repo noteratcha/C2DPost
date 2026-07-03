@@ -139,14 +139,11 @@ class DPostConverterGUI(ctk.CTk):
         table_frame.pack(fill='both', expand=True, padx=20, pady=(0, 20))
         
         vsb = ctk.CTkScrollbar(table_frame, orientation="vertical")
-        hsb = ctk.CTkScrollbar(table_frame, orientation="horizontal")
         
-        self.tree = ttk.Treeview(table_frame, selectmode="extended", yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        self.tree = ttk.Treeview(table_frame, selectmode="extended", yscrollcommand=vsb.set)
         vsb.configure(command=self.tree.yview)
-        hsb.configure(command=self.tree.xview)
         
         vsb.pack(side='right', fill='y')
-        hsb.pack(side='bottom', fill='x')
         self.tree.pack(side='left', fill='both', expand=True)
         
         self.columns = [
