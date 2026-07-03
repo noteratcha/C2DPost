@@ -172,16 +172,16 @@ class DPostConverterGUI(ctk.CTk):
         
         bg = "#ffffff"
         fg = "#334155"
-        headings_bg = "#f8fafc"
+        headings_bg = "#e2e8f0"
         selected_bg = "#dbeafe"
             
         style.configure('Treeview', background=bg, foreground=fg, rowheight=35, 
                         fieldbackground=bg, borderwidth=0, font=('Segoe UI', 10))
         style.map('Treeview', background=[('selected', selected_bg)], foreground=[('selected', '#1e293b')])
         
-        style.configure('Treeview.Heading', background=headings_bg, foreground="#475569", 
+        style.configure('Treeview.Heading', background=headings_bg, foreground="#0f172a", 
                         font=('Segoe UI', 10, 'bold'), borderwidth=0, relief="flat", padding=(5, 8))
-        style.map('Treeview.Heading', background=[('active', '#f1f5f9')])
+        style.map('Treeview.Heading', background=[('active', '#cbd5e1')])
         
         # Tags for alternating row colors
         self.tree.tag_configure('oddrow', background="#ffffff")
