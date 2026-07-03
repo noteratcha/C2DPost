@@ -98,7 +98,7 @@ class DPostConverterGUI(ctk.CTk):
         self.center_frame = ctk.CTkFrame(btn_frame, fg_color="transparent")
         self.center_frame.pack(side='left', fill='both', expand=True, padx=30)
         
-        self.status_box = ctk.CTkFrame(self.center_frame, fg_color="transparent", border_width=1, border_color=COLOR_BORDER, corner_radius=6)
+        self.status_box = ctk.CTkFrame(self.center_frame, fg_color="#f5f5f5", border_width=1, border_color=COLOR_BORDER, corner_radius=6)
         self.status_box.pack(fill='both', expand=True)
         
         self.lbl_status = ctk.CTkLabel(self.status_box, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 12), text_color=COLOR_PRIMARY)
