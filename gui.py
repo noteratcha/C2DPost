@@ -104,6 +104,11 @@ class DPostConverterGUI(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(self.status_box, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 12), text_color=COLOR_PRIMARY)
         self.lbl_status.pack(fill='both', expand=True, pady=(8, 8))
         
+        self.status_box.bind("<Button-1>", self.show_selected_files_popup)
+        self.lbl_status.bind("<Button-1>", self.show_selected_files_popup)
+        self.status_box.configure(cursor="hand2")
+        self.lbl_status.configure(cursor="hand2")
+        
         self.btn_export = ctk.CTkButton(btn_frame, text=" ✖ บันทึกไฟล์ Excel... ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
                                         font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=170, height=36)
         self.btn_export.pack(side='right')
@@ -240,6 +245,30 @@ class DPostConverterGUI(ctk.CTk):
         for index, (val, k) in enumerate(items):
             self.tree.move(k, '', index)
         self.tree.heading(col_id, command=lambda: self.sort_treeview(col_id, not reverse))
+
+    def show_selected_files_popup(self, event=None):
+        if not self.selected_files:
+            return
+            
+        popup = ctk.CTkToplevel(self)
+        popup.title(f"ไฟล์ที่เลือกทั้งหมด ({len(self.selected_files)} ไฟล์)")
+        popup.geometry("600x400")
+        popup.transient(self) # Keep on top of main window
+        popup.grab_set()      # Make it modal
+        
+        # Center the popup
+        popup.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 600) // 2
+        y = self.winfo_y() + (self.winfo_height() - 400) // 2
+        popup.geometry(f"+{x}+{y}")
+        
+        frame = ctk.CTkScrollableFrame(popup, fg_color="transparent")
+        frame.pack(fill='both', expand=True, padx=20, pady=20)
+        
+        for i, filepath in enumerate(self.selected_files):
+            filename = os.path.basename(filepath)
+            lbl = ctk.CTkLabel(frame, text=f"{i+1}. {filename}", font=("Segoe UI", 12), anchor="w")
+            lbl.pack(fill='x', pady=2)
 
     def clear_selection(self):
         self.selected_files = []
