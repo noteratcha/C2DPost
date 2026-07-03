@@ -211,7 +211,9 @@ class DPostConverterGUI(ctk.CTk):
                         break
             
             if matches:
-                addr = f"{row.get('RECEIVER_ADDRESS', '')} {row.get('RECEIVER_DISTRICT', '')} {row.get('RECEIVER_PROVINCE', '')}".strip()
+                addr = f"{row.get('RECEIVER_ADDRESS', '')} {row.get('RECEIVER_DISTRICT', '')} {row.get('RECEIVER_AMPHUR', '')} {row.get('RECEIVER_PROVINCE', '')}".strip()
+                # Clean up double spaces if any component is missing
+                addr = ' '.join(addr.split())
                 tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
                 self.tree.insert("", "end", values=(
                     idx + 1,
