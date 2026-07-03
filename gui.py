@@ -138,12 +138,12 @@ class DPostConverterGUI(ctk.CTk):
         table_frame = tk.Frame(card_preview, bg=COLOR_CARD)
         table_frame.pack(fill='both', expand=True, padx=20, pady=(0, 20))
         
-        vsb = ttk.Scrollbar(table_frame, orient="vertical")
-        hsb = ttk.Scrollbar(table_frame, orient="horizontal")
+        vsb = ctk.CTkScrollbar(table_frame, orientation="vertical")
+        hsb = ctk.CTkScrollbar(table_frame, orientation="horizontal")
         
         self.tree = ttk.Treeview(table_frame, selectmode="extended", yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        vsb.config(command=self.tree.yview)
-        hsb.config(command=self.tree.xview)
+        vsb.configure(command=self.tree.yview)
+        hsb.configure(command=self.tree.xview)
         
         vsb.pack(side='right', fill='y')
         hsb.pack(side='bottom', fill='x')
@@ -171,17 +171,21 @@ class DPostConverterGUI(ctk.CTk):
         style.theme_use('clam')
         
         bg = "#ffffff"
-        fg = "#0f172a"
-        headings_bg = "#f1f5f9"
-        selected_bg = "#e2e8f0"
+        fg = "#334155"
+        headings_bg = "#f8fafc"
+        selected_bg = "#dbeafe"
             
-        style.configure('Treeview', background=bg, foreground=fg, rowheight=28, 
+        style.configure('Treeview', background=bg, foreground=fg, rowheight=35, 
                         fieldbackground=bg, borderwidth=0, font=('Segoe UI', 10))
-        style.map('Treeview', background=[('selected', selected_bg)], foreground=[('selected', '#0f172a')])
+        style.map('Treeview', background=[('selected', selected_bg)], foreground=[('selected', '#1e293b')])
         
-        style.configure('Treeview.Heading', background=headings_bg, foreground=fg, 
-                        font=('Segoe UI', 11, 'bold'), borderwidth=1, relief="flat", padding=(5, 5))
-        style.map('Treeview.Heading', background=[('active', '#e2e8f0')])
+        style.configure('Treeview.Heading', background=headings_bg, foreground="#475569", 
+                        font=('Segoe UI', 10, 'bold'), borderwidth=0, relief="flat", padding=(5, 8))
+        style.map('Treeview.Heading', background=[('active', '#f1f5f9')])
+        
+        # Tags for alternating row colors
+        self.tree.tag_configure('oddrow', background="#ffffff")
+        self.tree.tag_configure('evenrow', background="#f8fafc")
 
     def set_step(self, step):
         inactive_color = "#166534"
@@ -211,13 +215,14 @@ class DPostConverterGUI(ctk.CTk):
             
             if matches:
                 addr = f"{row.get('RECEIVER_ADDRESS', '')} {row.get('RECEIVER_DISTRICT', '')} {row.get('RECEIVER_PROVINCE', '')}".strip()
+                tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
                 self.tree.insert("", "end", values=(
                     idx + 1,
                     row.get('INV_NO', ''),
                     row.get('RECEIVER', ''),
                     addr,
                     row.get('RECEIVER_ZIPCODE', '')
-                ))
+                ), tags=(tag,))
 
     def clear_search(self, event=None):
         self.search_entry.delete(0, 'end')
