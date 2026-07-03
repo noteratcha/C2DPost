@@ -104,11 +104,6 @@ class DPostConverterGUI(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(self.status_box, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 12), text_color=COLOR_PRIMARY)
         self.lbl_status.pack(fill='both', expand=True, pady=(8, 8))
         
-        self.status_box.bind("<Button-1>", self.show_selected_files_popup)
-        self.lbl_status.bind("<Button-1>", self.show_selected_files_popup)
-        self.status_box.configure(cursor="hand2")
-        self.lbl_status.configure(cursor="hand2")
-        
         self.btn_export = ctk.CTkButton(btn_frame, text=" ✖ บันทึกไฟล์ Excel... ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
                                         font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=170, height=36)
         self.btn_export.pack(side='right')
@@ -133,6 +128,8 @@ class DPostConverterGUI(ctk.CTk):
         
         self.lbl_stat_files = ctk.CTkLabel(preview_header, text="📄 ไฟล์ PDF: 0 ไฟล์", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
         self.lbl_stat_files.pack(side='right', padx=10)
+        self.lbl_stat_files.bind("<Button-1>", self.show_selected_files_popup)
+        self.lbl_stat_files.configure(cursor="hand2")
         
         self.search_entry.bind("<KeyRelease>", self.filter_treeview)
         self.search_entry.bind("<Escape>", self.clear_search)
