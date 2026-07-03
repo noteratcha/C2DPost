@@ -235,7 +235,7 @@ class DPostConverterGUI(ctk.CTk):
         card_files = ctk.CTkFrame(container, corner_radius=10, border_width=1, border_color=("#cbd5e1", "#334155"))
         card_files.grid(row=0, column=0, sticky='nsew', pady=(0, 10))
         
-        ctk.CTkLabel(card_files, text="1. เลือกแหล่งข้อมูลเอกสาร PDF", font=("Segoe UI", 12, "bold"), 
+        ctk.CTkLabel(card_files, text="1. เลือกเอกสาร PDF", font=("Segoe UI", 12, "bold"), 
                      text_color=("#0f172a", "#f8fafc")).pack(anchor='w', padx=20, pady=(12, 5))
         
         btn_frame = ctk.CTkFrame(card_files, fg_color="transparent")
@@ -353,7 +353,7 @@ class DPostConverterGUI(ctk.CTk):
         self.lbl_stat_prov = ctk.CTkLabel(self.stats_frame, text="📍 ส่งบ่อยสุด: -", font=("Segoe UI", 11, "bold"), text_color=("#475569", "#cbd5e1"))
         self.lbl_stat_prov.pack(anchor='w', padx=15, pady=(3, 8))
         
-        self.btn_export = ctk.CTkButton(export_inner, text=" 📥 บันทึกไฟล์ Excel... ", fg_color="#16a34a", hover_color="#15803d",
+        self.btn_export = ctk.CTkButton(export_inner, text=" 📥 ดาวน์โหลด ", fg_color="#16a34a", hover_color="#15803d",
                                         font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', height=45)
         self.btn_export.pack(fill='x', pady=(5, 5))
         
