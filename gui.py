@@ -20,7 +20,7 @@ ctk.set_appearance_mode("light")
 # Colors matching the user's screenshot
 COLOR_PRIMARY = "#15803d"      # Dark green (Header, primary buttons)
 COLOR_SUCCESS = "#16a34a"      # Green
-COLOR_BG = "#f8fafc"           # Very light gray for app background
+COLOR_BG = "#ebebeb"           # Default CustomTkinter light background
 COLOR_CARD = "#ffffff"         # White for cards
 COLOR_BORDER = "#cbd5e1"       # Light gray border
 COLOR_TEXT_MAIN = "#0f172a"    # Dark slate for main text
@@ -208,7 +208,7 @@ class DPostConverterGUI(ctk.CTk):
                 addr = f"{row.get('RECEIVER_ADDRESS', '')} {row.get('RECEIVER_DISTRICT', '')} {row.get('RECEIVER_PROVINCE', '')}".strip()
                 self.tree.insert("", "end", values=(
                     idx + 1,
-                    row.get('REF_NO', ''),
+                    row.get('INV_NO', ''),
                     row.get('RECEIVER', ''),
                     addr,
                     row.get('RECEIVER_ZIPCODE', '')
