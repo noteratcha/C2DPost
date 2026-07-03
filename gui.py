@@ -146,6 +146,7 @@ class DPostConverterGUI(ctk.CTk):
         
         vsb.pack(side='right', fill='y')
         self.tree.pack(side='left', fill='both', expand=True)
+        self.tree.bind("<Double-1>", self.open_pdf)
         
         self.columns = [
             ("No", "ลำดับ", 50),
@@ -216,7 +217,7 @@ class DPostConverterGUI(ctk.CTk):
                 # Clean up double spaces if any component is missing
                 addr = ' '.join(addr.split())
                 tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
-                self.tree.insert("", "end", values=(
+                self.tree.insert("", "end", iid=str(idx), values=(
                     idx + 1,
                     row.get('INV_NO', ''),
                     row.get('RECEIVER', ''),
@@ -247,6 +248,24 @@ class DPostConverterGUI(ctk.CTk):
         for index, (val, k) in enumerate(items):
             self.tree.move(k, '', index)
         self.tree.heading(col_id, command=lambda: self.sort_treeview(col_id, not reverse))
+
+    def open_pdf(self, event=None):
+        selected_items = self.tree.selection()
+        if not selected_items:
+            return
+            
+        try:
+            iid = selected_items[0]
+            idx = int(iid)
+            if self.dataframe is not None and not self.dataframe.empty and 'SOURCE_FILE' in self.dataframe.columns:
+                file_path = self.dataframe.loc[idx, 'SOURCE_FILE']
+                if os.path.exists(file_path):
+                    os.startfile(file_path)
+                else:
+                    import tkinter.messagebox as messagebox
+                    messagebox.showerror("ไม่พบไฟล์", f"ไม่พบไฟล์: {file_path}")
+        except Exception as e:
+            print(f"Error opening PDF: {e}")
 
     def show_selected_files_popup(self, event=None):
         if not self.selected_files:
