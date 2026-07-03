@@ -95,14 +95,17 @@ class DPostConverterGUI(ctk.CTk):
                                          font=("Segoe UI", 12, "bold"), command=self.clear_selection, width=100, height=36)
         self.btn_clear.pack(side='left')
         
-        self.lbl_status = ctk.CTkLabel(btn_frame, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 12), text_color=COLOR_PRIMARY)
-        self.lbl_status.pack(side='left', fill='x', expand=True, anchor='center')
+        self.center_frame = ctk.CTkFrame(btn_frame, fg_color="transparent")
+        self.center_frame.pack(side='left', fill='both', expand=True, padx=10)
+        
+        self.lbl_status = ctk.CTkLabel(self.center_frame, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 12), text_color=COLOR_PRIMARY)
+        self.lbl_status.pack(fill='x', expand=True)
         
         self.btn_export = ctk.CTkButton(btn_frame, text=" ✖ บันทึกไฟล์ Excel... ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
                                         font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=170, height=36)
         self.btn_export.pack(side='right')
         
-        self.progress = ctk.CTkProgressBar(card_files, progress_color=COLOR_PRIMARY, height=6)
+        self.progress = ctk.CTkProgressBar(self.center_frame, progress_color=COLOR_PRIMARY, height=6)
         
         # Card 2: Preview Table
         card_preview = ctk.CTkFrame(container, fg_color=COLOR_CARD, corner_radius=10, border_width=1, border_color=COLOR_BORDER)
@@ -272,7 +275,7 @@ class DPostConverterGUI(ctk.CTk):
         self.btn_clear.configure(state='disabled')
         self.btn_export.configure(state='disabled')
         
-        self.progress.pack(fill='x', padx=20, pady=(0, 12), before=self.btn_frame if hasattr(self, 'btn_frame') else None) # we'll just pack it
+        self.progress.pack(fill='x', side='bottom', pady=(0, 5))
         self.progress.set(0)
         
         self.set_step(2)
