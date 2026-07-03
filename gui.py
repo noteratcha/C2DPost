@@ -146,6 +146,12 @@ class DPostConverterGUI(ctk.CTk):
         vsb.pack(side='right', fill='y')
         self.tree.pack(side='left', fill='both', expand=True)
         self.tree.bind("<Delete>", self.delete_selected)
+        self.tree.bind("<BackSpace>", self.delete_selected)
+        
+        # Context Menu for Treeview
+        self.tree_menu = tk.Menu(self.tree, tearoff=0)
+        self.tree_menu.add_command(label="ลบข้อมูล (Delete)", command=self.delete_selected)
+        self.tree.bind("<Button-3>", self.show_tree_context_menu)
         
         self.columns = [
             ("No", "ลำดับ", 50),
@@ -247,6 +253,13 @@ class DPostConverterGUI(ctk.CTk):
         for index, (val, k) in enumerate(items):
             self.tree.move(k, '', index)
         self.tree.heading(col_id, command=lambda: self.sort_treeview(col_id, not reverse))
+
+    def show_tree_context_menu(self, event):
+        item = self.tree.identify_row(event.y)
+        if item:
+            if item not in self.tree.selection():
+                self.tree.selection_set(item)
+            self.tree_menu.post(event.x_root, event.y_root)
 
     def delete_selected(self, event=None):
         selected_items = self.tree.selection()
