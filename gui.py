@@ -104,7 +104,7 @@ class DPostConverterGUI(ctk.CTk):
         btn_frame = ctk.CTkFrame(card_files, fg_color="transparent")
         btn_frame.pack(fill='x', padx=20, pady=(5, 12))
         
-        self.btn_select_files = ctk.CTkButton(btn_frame, text=" ➕ เพิ่มไฟล์ (Append) ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
+        self.btn_select_files = ctk.CTkButton(btn_frame, text=" ➕ เพิ่มไฟล์ PDF ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
                                                 font=("Segoe UI", 12, "bold"), command=self.select_files, width=150, height=36)
         self.btn_select_files.pack(side='left', padx=(0, 10))
         
@@ -478,7 +478,7 @@ class DPostConverterGUI(ctk.CTk):
         self.lbl_stat_records.configure(text="👥 รายการผู้รับ: 0 รายการ")
         
         self.btn_export.configure(state='disabled')
-        self.btn_select_files.configure(text=" ➕ เพิ่มไฟล์ (Append) ")
+        self.btn_select_files.configure(text=" ➕ เพิ่มไฟล์ PDF ")
         
         for item in self.tree.get_children():
             self.tree.delete(item)
