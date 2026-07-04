@@ -69,27 +69,7 @@ class DPostConverterGUI(ctk.CTk):
         header = ctk.CTkFrame(self, fg_color=COLOR_PRIMARY, corner_radius=0, height=60)
         header.pack(fill='x', side='top')
         header.pack_propagate(False)
-        
         ctk.CTkLabel(header, text="สำนักงานที่ดิน", font=("Segoe UI", 18, "bold"), text_color="#ffffff").pack(side='left', padx=30)
-        
-        # Steps Indicator Container (Pill shape)
-        steps_frame = ctk.CTkFrame(header, fg_color="#0f5128", corner_radius=16)
-        steps_frame.pack(side='right', padx=30, pady=10)
-        
-        self.lbl_step1 = ctk.CTkLabel(steps_frame, text="1. เลือกไฟล์ PDF", font=("Segoe UI", 11, "bold"), text_color="#86efac")
-        self.lbl_step1.pack(side='left', padx=10, pady=6)
-        
-        self.arrow1 = ctk.CTkLabel(steps_frame, text="›", font=("Segoe UI", 14, "bold"), text_color="#a7f3d0")
-        self.arrow1.pack(side='left')
-        
-        self.lbl_step2 = ctk.CTkLabel(steps_frame, text="2. พรีวิวข้อมูล", font=("Segoe UI", 11), text_color="#a7f3d0")
-        self.lbl_step2.pack(side='left', padx=10, pady=6)
-        
-        self.arrow2 = ctk.CTkLabel(steps_frame, text="›", font=("Segoe UI", 14, "bold"), text_color="#a7f3d0")
-        self.arrow2.pack(side='left')
-        
-        self.lbl_step3 = ctk.CTkLabel(steps_frame, text="3. บันทึกไฟล์ Excel", font=("Segoe UI", 11), text_color="#a7f3d0")
-        self.lbl_step3.pack(side='left', padx=10, pady=6)
         
         # Main Container
         container = ctk.CTkFrame(self, fg_color="transparent")
@@ -198,7 +178,6 @@ class DPostConverterGUI(ctk.CTk):
             col_anchor = 'center' if col_id == "View" else ('w' if col_id in ["Receiver", "Address"] else 'center')
             self.tree.column(col_id, width=col_width, minwidth=col_width if col_id == "View" else 50, stretch=stretch, anchor=col_anchor)
             
-        self.set_step(1)
 
     def style_treeview(self):
         style = ttk.Style()
@@ -217,26 +196,7 @@ class DPostConverterGUI(ctk.CTk):
                         font=('Segoe UI', 10, 'bold'), borderwidth=0, relief="flat", padding=(5, 8))
         style.map('Treeview.Heading', background=[('active', '#cbd5e1')])
         
-        # Tags for alternating row colors
-        self.tree.tag_configure('oddrow', background="#ffffff")
-        self.tree.tag_configure('evenrow', background="#f8fafc")
 
-    def set_step(self, step):
-        inactive_text = "#a7f3d0"
-        active_text = "#ffffff"
-        
-        self.lbl_step1.configure(
-            text_color=active_text if step == 1 else inactive_text,
-            font=("Segoe UI", 11, "bold" if step == 1 else "normal")
-        )
-        self.lbl_step2.configure(
-            text_color=active_text if step == 2 else inactive_text,
-            font=("Segoe UI", 11, "bold" if step == 2 else "normal")
-        )
-        self.lbl_step3.configure(
-            text_color=active_text if step == 3 else inactive_text,
-            font=("Segoe UI", 11, "bold" if step == 3 else "normal")
-        )
 
     def filter_treeview(self, event=None):
         query = self.search_entry.get().strip().lower()
@@ -495,8 +455,6 @@ class DPostConverterGUI(ctk.CTk):
         
         for item in self.tree.get_children():
             self.tree.delete(item)
-            
-        self.set_step(1)
 
     def select_files(self):
         files = filedialog.askopenfilenames(
@@ -523,8 +481,6 @@ class DPostConverterGUI(ctk.CTk):
         self.progress.set(0)
         self.lbl_status.configure(text="กำลังแปลงไฟล์... (0%)")
         self.lbl_status.pack(pady=(4, 0)) # adjust padding when progress bar is visible
-        
-        self.set_step(2)
         
         thread = threading.Thread(target=self.run_conversion_task, args=(files_to_process,))
         thread.daemon = True
@@ -589,17 +545,14 @@ class DPostConverterGUI(ctk.CTk):
             self.lbl_status.configure(text=f"ประมวลผลเสร็จสิ้น รวมทั้งหมด {len(self.dataframe)} รายการ")
             
             self.filter_treeview()
-            self.set_step(3)
         else:
             self.lbl_stat_files.configure(text=f"📄 ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
             self.lbl_stat_records.configure(text=f"👥 รายการผู้รับ: {len(self.dataframe) if self.dataframe is not None else 0} รายการ")
             
             if not self.parsed_records:
                 self.lbl_status.configure(text="ไม่พบข้อมูลในไฟล์ที่เลือก")
-                self.set_step(1)
             else:
                 self.lbl_status.configure(text=f"ประมวลผลเสร็จสิ้น รวมทั้งหมด {len(self.dataframe)} รายการ")
-                self.set_step(3)
         
         self.btn_select_files.configure(state='normal')
         self.btn_clear.configure(state='normal')
