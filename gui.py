@@ -135,7 +135,7 @@ class DPostConverterGUI(ctk.CTk):
         preview_header = ctk.CTkFrame(card_preview, fg_color="transparent")
         preview_header.pack(fill='x', padx=20, pady=(15, 10))
         
-        ctk.CTkLabel(preview_header, text="2. ตารางตัวอย่างข้อมูลหลังสกัด (Preview)", font=("Segoe UI", 12, "bold"), text_color=COLOR_TEXT_MAIN).pack(side='left')
+        ctk.CTkLabel(preview_header, text="2. ตารางแสดงข้อมูล", font=("Segoe UI", 12, "bold"), text_color=COLOR_TEXT_MAIN).pack(side='left')
         
         # Right aligned stats and search
         self.search_entry = ctk.CTkEntry(preview_header, placeholder_text=" 🔍 ค้นหาผู้รับ / เลขอ้างอิง... ", width=250, height=30, font=("Segoe UI", 11), corner_radius=15)
