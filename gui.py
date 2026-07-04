@@ -68,8 +68,9 @@ class DPostConverterGUI(ctk.CTk):
             
         # 2. Draw Magnifier at x=75 (centered around 75, offset 67)
         offset_view = 67
-        # Draw lens (circle center at offset_view + 6, 6, radius 4)
+        # Draw thick lens (radius 4 and radius 3)
         points = [
+            # Outer ring (radius 4)
             (offset_view + 6, 2), (offset_view + 5, 2), (offset_view + 7, 2),
             (offset_view + 6, 10), (offset_view + 5, 10), (offset_view + 7, 10),
             (offset_view + 2, 6), (offset_view + 2, 5), (offset_view + 2, 7),
@@ -78,13 +79,22 @@ class DPostConverterGUI(ctk.CTk):
             (offset_view + 9, 3), (offset_view + 9, 4), (offset_view + 8, 3),
             (offset_view + 3, 9), (offset_view + 3, 8), (offset_view + 4, 9),
             (offset_view + 9, 9), (offset_view + 9, 8), (offset_view + 8, 9),
+            
+            # Inner ring (radius 3) to make it thick
+            (offset_view + 6, 3), (offset_view + 5, 3), (offset_view + 7, 3),
+            (offset_view + 6, 9), (offset_view + 5, 9), (offset_view + 7, 9),
+            (offset_view + 3, 6), (offset_view + 3, 5), (offset_view + 3, 7),
+            (offset_view + 9, 6), (offset_view + 9, 5), (offset_view + 9, 7),
+            (offset_view + 4, 4), (offset_view + 8, 4), (offset_view + 4, 8), (offset_view + 8, 8)
         ]
         for px, py in points:
             img.put(view_color, (px, py))
-        # Handle (diagonal line)
+        # Handle (thick diagonal line)
         for i in range(5):
             img.put(view_color, (offset_view + 9 + i, 9 + i))
             img.put(view_color, (offset_view + 9 + i + 1, 9 + i))
+            img.put(view_color, (offset_view + 9 + i, 9 + i + 1))
+            img.put(view_color, (offset_view + 9 + i - 1, 9 + i + 1))
             
         return img
 
