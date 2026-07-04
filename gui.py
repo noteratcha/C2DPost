@@ -46,6 +46,23 @@ class DPostConverterGUI(ctk.CTk):
         self.bind("<Control-s>", lambda e: self.export_excel_shortcut())
         self.bind("<Control-S>", lambda e: self.export_excel_shortcut())
         self.bind("<Escape>", self.on_escape_press)
+        
+        # Initialize hover image state
+        self.gray_x_img = self.create_cross_image("#94a3b8")
+        self.red_x_img = self.create_cross_image("#ef4444")
+        self.tooltip_window = None
+
+    def create_cross_image(self, color):
+        img = tk.PhotoImage(width=16, height=16)
+        # Draw a diagonal cross centered in 16x16
+        for i in range(4, 12):
+            img.put(color, (i, i))
+            img.put(color, (15-i, i))
+            img.put(color, (i+1, i))
+            img.put(color, (i, i+1))
+            img.put(color, (15-i-1, i))
+            img.put(color, (15-i, i+1))
+        return img
 
     def create_layout(self):
         # 1. Header Banner (Green)
@@ -148,9 +165,10 @@ class DPostConverterGUI(ctk.CTk):
         self.tree.pack(side='left', fill='both', expand=True)
         self.tree.bind("<Double-1>", self.open_pdf)
         self.tree.bind("<ButtonRelease-1>", self.on_tree_click)
+        self.tree.bind("<Motion>", self.on_tree_motion)
+        self.tree.bind("<Leave>", self.on_tree_leave)
         
         self.columns = [
-            ("Delete", "ลบ", 40),
             ("No", "ลำดับ", 50),
             ("Ref", "เลขที่อ้างอิง", 120),
             ("Receiver", "ผู้รับ", 180),
@@ -159,7 +177,11 @@ class DPostConverterGUI(ctk.CTk):
         ]
         
         self.tree["columns"] = [col[0] for col in self.columns]
-        self.tree["show"] = "headings"
+        self.tree["show"] = "tree headings"
+        
+        # Configure tree column (#0) for Delete action
+        self.tree.heading("#0", text="ลบ", anchor='center')
+        self.tree.column("#0", width=55, minwidth=50, stretch=False, anchor='center')
         
         for col_id, col_name, col_width in self.columns:
             self.tree.heading(col_id, text=col_name, command=lambda _col=col_id: self.sort_treeview(_col, False))
@@ -219,8 +241,7 @@ class DPostConverterGUI(ctk.CTk):
                 # Clean up double spaces if any component is missing
                 addr = ' '.join(addr.split())
                 tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
-                self.tree.insert("", "end", iid=str(idx), values=(
-                    "❌",
+                self.tree.insert("", "end", iid=str(idx), image=self.gray_x_img, values=(
                     idx + 1,
                     row.get('INV_NO', ''),
                     row.get('RECEIVER', ''),
@@ -254,13 +275,75 @@ class DPostConverterGUI(ctk.CTk):
 
     def on_tree_click(self, event):
         region = self.tree.identify_region(event.x, event.y)
-        if region == "cell":
+        if region in ["cell", "tree"]:
             column = self.tree.identify_column(event.x)
-            if column == "#1":  # Column index starts at #1 for the first column
+            if column == "#0":  # Column #0 is the tree column
                 item = self.tree.identify_row(event.y)
                 if item:
                     self.tree.selection_set(item)
                     self.delete_selected()
+
+    def on_tree_motion(self, event):
+        region = self.tree.identify_region(event.x, event.y)
+        item = self.tree.identify_row(event.y)
+        column = self.tree.identify_column(event.x)
+        
+        current_hovered = getattr(self, '_hovered_item', None)
+        
+        if region in ["cell", "tree"] and column == "#0" and item:
+            self.tree.configure(cursor="hand2")
+            if current_hovered != item:
+                if current_hovered:
+                    try:
+                        self.tree.item(current_hovered, image=self.gray_x_img)
+                    except:
+                        pass
+                self.tree.item(item, image=self.red_x_img)
+                self._hovered_item = item
+            
+            # Show tooltip "ลบรายการ"
+            self.show_tooltip("ลบรายการ", event.x_root + 15, event.y_root + 15)
+        else:
+            self.tree.configure(cursor="")
+            if current_hovered:
+                try:
+                    self.tree.item(current_hovered, image=self.gray_x_img)
+                except:
+                    pass
+                self._hovered_item = None
+            self.hide_tooltip()
+
+    def on_tree_leave(self, event):
+        self.tree.configure(cursor="")
+        current_hovered = getattr(self, '_hovered_item', None)
+        if current_hovered:
+            try:
+                self.tree.item(current_hovered, image=self.gray_x_img)
+            except:
+                pass
+            self._hovered_item = None
+        self.hide_tooltip()
+
+    def show_tooltip(self, text, x, y):
+        if self.tooltip_window:
+            self.tooltip_window.geometry(f"+{x}+{y}")
+            return
+            
+        self.tooltip_window = tk.Toplevel(self)
+        self.tooltip_window.wm_overrideredirect(True)
+        self.tooltip_window.geometry(f"+{x}+{y}")
+        
+        # Style the tooltip
+        label = tk.Label(self.tooltip_window, text=text, justify='left',
+                         background="#334155", foreground="#ffffff",
+                         font=("Segoe UI", 9),
+                         relief='flat', borderwidth=0, padx=6, pady=4)
+        label.pack(ipadx=1)
+
+    def hide_tooltip(self):
+        if self.tooltip_window:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
 
     def delete_selected(self, event=None):
         import tkinter.messagebox as messagebox
