@@ -70,7 +70,7 @@ class DPostConverterGUI(ctk.CTk):
         header.pack(fill='x', side='top')
         header.pack_propagate(False)
         
-        ctk.CTkLabel(header, text="กรมที่ดิน", font=("Segoe UI", 18, "bold"), text_color="#ffffff").pack(side='left', padx=30)
+        ctk.CTkLabel(header, text="สำนักงานที่ดิน", font=("Segoe UI", 18, "bold"), text_color="#ffffff").pack(side='left', padx=30)
         
         # Steps Indicator
         steps_frame = ctk.CTkFrame(header, fg_color="transparent")
