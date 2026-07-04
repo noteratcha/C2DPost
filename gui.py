@@ -48,20 +48,42 @@ class DPostConverterGUI(ctk.CTk):
         self.bind("<Escape>", self.on_escape_press)
         
         # Initialize hover image state
-        self.gray_x_img = self.create_cross_image("#94a3b8")
-        self.red_x_img = self.create_cross_image("#ef4444")
+        self.tools_normal_img = self.create_tools_image("#94a3b8", "#94a3b8")
+        self.tools_hover_x_img = self.create_tools_image("#ef4444", "#94a3b8")
+        self.tools_hover_view_img = self.create_tools_image("#94a3b8", "#3b82f6")
         self.tooltip_window = None
 
-    def create_cross_image(self, color):
-        img = tk.PhotoImage(width=16, height=16)
-        # Draw a diagonal cross centered in 16x16
-        for i in range(4, 12):
-            img.put(color, (i, i))
-            img.put(color, (15-i, i))
-            img.put(color, (i+1, i))
-            img.put(color, (i, i+1))
-            img.put(color, (15-i-1, i))
-            img.put(color, (15-i, i+1))
+    def create_tools_image(self, x_color, view_color):
+        img = tk.PhotoImage(width=100, height=16)
+        
+        # 1. Draw X at x=25 (centered around 25, offset 17)
+        offset_x = 17
+        for i in range(8):
+            img.put(x_color, (offset_x + i + 1, i))
+            img.put(x_color, (offset_x + i, i + 1))
+            img.put(x_color, (offset_x + 15 - i - 1, i))
+            img.put(x_color, (offset_x + 15 - i, i + 1))
+            
+        # 2. Draw Magnifier at x=75 (centered around 75, offset 67)
+        offset_view = 67
+        # Draw lens (circle center at offset_view + 6, 6, radius 4)
+        points = [
+            (offset_view + 6, 2), (offset_view + 5, 2), (offset_view + 7, 2),
+            (offset_view + 6, 10), (offset_view + 5, 10), (offset_view + 7, 10),
+            (offset_view + 2, 6), (offset_view + 2, 5), (offset_view + 2, 7),
+            (offset_view + 10, 6), (offset_view + 10, 5), (offset_view + 10, 7),
+            (offset_view + 3, 3), (offset_view + 3, 4), (offset_view + 4, 3),
+            (offset_view + 9, 3), (offset_view + 9, 4), (offset_view + 8, 3),
+            (offset_view + 3, 9), (offset_view + 3, 8), (offset_view + 4, 9),
+            (offset_view + 9, 9), (offset_view + 9, 8), (offset_view + 8, 9),
+        ]
+        for px, py in points:
+            img.put(view_color, (px, py))
+        # Handle (diagonal line)
+        for i in range(5):
+            img.put(view_color, (offset_view + 9 + i, 9 + i))
+            img.put(view_color, (offset_view + 9 + i + 1, 9 + i))
+            
         return img
 
     def create_layout(self):
@@ -156,7 +178,6 @@ class DPostConverterGUI(ctk.CTk):
         self.divider.place(relheight=1.0, x=100)
         
         self.columns = [
-            ("View", "ดู", 50),
             ("No", "ลำดับ", 50),
             ("Ref", "เลขที่อ้างอิง", 120),
             ("Receiver", "ผู้รับ", 180),
@@ -167,16 +188,16 @@ class DPostConverterGUI(ctk.CTk):
         self.tree["columns"] = [col[0] for col in self.columns]
         self.tree["show"] = "tree headings"
         
-        # Configure tree column (#0) for Delete action
-        self.tree.heading("#0", text="ลบ", anchor='center')
-        self.tree.column("#0", width=50, minwidth=50, stretch=False, anchor='center')
+        # Configure tree column (#0) for unified Tools action (Delete + View)
+        self.tree.heading("#0", text="เครื่องมือ", anchor='center')
+        self.tree.column("#0", width=100, minwidth=100, stretch=False, anchor='center')
         
         for col_id, col_name, col_width in self.columns:
             h_anchor = 'center'
             self.tree.heading(col_id, text=col_name, anchor=h_anchor, command=lambda _col=col_id: self.sort_treeview(_col, False))
-            stretch = False if col_id == "View" else True
-            col_anchor = 'center' if col_id == "View" else ('w' if col_id in ["Receiver", "Address"] else 'center')
-            self.tree.column(col_id, width=col_width, minwidth=col_width if col_id == "View" else 50, stretch=stretch, anchor=col_anchor)
+            stretch = True
+            col_anchor = 'w' if col_id in ["Receiver", "Address"] else 'center'
+            self.tree.column(col_id, width=col_width, minwidth=col_width, stretch=stretch, anchor=col_anchor)
             
 
     def style_treeview(self):
@@ -190,11 +211,9 @@ class DPostConverterGUI(ctk.CTk):
             
         style.configure('Treeview', background=bg, foreground=fg, rowheight=35, 
                         fieldbackground=bg, borderwidth=0, font=('Segoe UI', 10))
-        style.map('Treeview', background=[('selected', selected_bg)], foreground=[('selected', '#1e293b')])
-        
-        style.configure('Treeview.Heading', background=headings_bg, foreground="#0f172a", 
-                        font=('Segoe UI', 10, 'bold'), borderwidth=0, relief="flat", padding=(5, 8))
-        style.map('Treeview.Heading', background=[('active', '#cbd5e1')])
+        self.tree.tag_configure('oddrow', background="#ffffff")
+        self.tree.tag_configure('evenrow', background="#f8fafc")
+        self.tree.tag_configure('hover', foreground="#15803d")
         
 
 
@@ -221,8 +240,7 @@ class DPostConverterGUI(ctk.CTk):
                 # Clean up double spaces if any component is missing
                 addr = ' '.join(addr.split())
                 tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
-                self.tree.insert("", "end", iid=str(idx), image=self.gray_x_img, values=(
-                    "🔍",
+                self.tree.insert("", "end", iid=str(idx), image=self.tools_normal_img, values=(
                     idx + 1,
                     row.get('INV_NO', ''),
                     row.get('RECEIVER', ''),
@@ -260,14 +278,11 @@ class DPostConverterGUI(ctk.CTk):
             column = self.tree.identify_column(event.x)
             item = self.tree.identify_row(event.y)
             if item:
-                if column == "#0":  # Column #0 is the tree column (Delete)
-                    # Center is 25 (0 to 50), allow click only within 15 to 35 (20px width)
+                if column == "#0":  # Column #0 is the unified Tools column
                     if 15 <= event.x <= 35:
                         self.tree.selection_set(item)
                         self.delete_selected()
-                elif column == "#1":  # Column #1 is the View column
-                    # Center is 75 (50 + 25), allow click only within 65 to 85 (20px width)
-                    if 65 <= event.x <= 85:
+                    elif 65 <= event.x <= 85:
                         self.tree.selection_set(item)
                         self.open_pdf()
 
@@ -278,35 +293,52 @@ class DPostConverterGUI(ctk.CTk):
         
         current_hovered = getattr(self, '_hovered_item', None)
         
-        if region in ["cell", "tree"] and item:
-            if column == "#0" and (15 <= event.x <= 35):
+        # 1. Row Hover Text Highlight (for all columns when hovering a row)
+        for row in self.tree.get_children():
+            tags = list(self.tree.item(row, 'tags'))
+            clean_tags = [t for t in tags if t not in ['oddrow', 'evenrow', 'hover']]
+            idx = self.tree.index(row)
+            alt_tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
+            clean_tags.append(alt_tag)
+            
+            if row == item:
+                clean_tags.append('hover')
+            self.tree.item(row, tags=clean_tags)
+
+        # 2. Icon Hover (Delete or View)
+        if region in ["cell", "tree"] and item and column == "#0":
+            # Delete Icon (15-35)
+            if 15 <= event.x <= 35:
                 self.tree.configure(cursor="hand2")
-                if current_hovered != item:
+                if current_hovered != (item, 'delete'):
                     if current_hovered:
                         try:
-                            self.tree.item(current_hovered, image=self.gray_x_img)
+                            self.tree.item(current_hovered[0], image=self.tools_normal_img)
                         except:
                             pass
-                    self.tree.item(item, image=self.red_x_img)
-                    self._hovered_item = item
+                    self.tree.item(item, image=self.tools_hover_x_img)
+                    self._hovered_item = (item, 'delete')
                 self.show_tooltip("ลบรายการ", event.x_root + 15, event.y_root + 15)
                 return
-            elif column == "#1" and (65 <= event.x <= 85):
+            # View Icon (65-85)
+            elif 65 <= event.x <= 85:
                 self.tree.configure(cursor="hand2")
-                if current_hovered:
-                    try:
-                        self.tree.item(current_hovered, image=self.gray_x_img)
-                    except:
-                        pass
-                    self._hovered_item = None
+                if current_hovered != (item, 'view'):
+                    if current_hovered:
+                        try:
+                            self.tree.item(current_hovered[0], image=self.tools_normal_img)
+                        except:
+                            pass
+                    self.tree.item(item, image=self.tools_hover_view_img)
+                    self._hovered_item = (item, 'view')
                 self.show_tooltip("ดูไฟล์ PDF", event.x_root + 15, event.y_root + 15)
                 return
                 
-        # If not hovering target columns, reset
+        # If not hovering target icons, reset cursor/images but keep row hover
         self.tree.configure(cursor="")
         if current_hovered:
             try:
-                self.tree.item(current_hovered, image=self.gray_x_img)
+                self.tree.item(current_hovered[0], image=self.tools_normal_img)
             except:
                 pass
             self._hovered_item = None
@@ -317,11 +349,18 @@ class DPostConverterGUI(ctk.CTk):
         current_hovered = getattr(self, '_hovered_item', None)
         if current_hovered:
             try:
-                self.tree.item(current_hovered, image=self.gray_x_img)
+                self.tree.item(current_hovered[0], image=self.tools_normal_img)
             except:
                 pass
             self._hovered_item = None
         self.hide_tooltip()
+        
+        # Clear row hover tag when leaving the tree
+        for row in self.tree.get_children():
+            tags = list(self.tree.item(row, 'tags'))
+            if 'hover' in tags:
+                tags.remove('hover')
+                self.tree.item(row, tags=tags)
 
     def show_tooltip(self, text, x, y):
         if self.tooltip_window:
