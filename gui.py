@@ -11,7 +11,7 @@ import customtkinter as ctk
 try:
     from convert_dpost import process_pdf, records_to_dataframe, __version__
 except ImportError:
-    __version__ = "2026.0630.1801"
+    __version__ = "2026.0704.0905"
     def process_pdf(path): return []
     def records_to_dataframe(records): return pd.DataFrame()
 
