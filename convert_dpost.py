@@ -2,9 +2,116 @@ import os
 import re
 import glob
 import pandas as pd
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
+import requests
+import io
+from reportlab.pdfgen import canvas
+from reportlab.graphics.barcode import code128, qr
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics import renderPDF
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.pagesizes import A4, portrait, landscape
+from reportlab.lib import colors
+from reportlab.lib.units import cm
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
-__version__ = "2026.0704.0905"
+try:
+    pdfmetrics.registerFont(TTFont('Tahoma', 'C:/Windows/Fonts/tahoma.ttf'))
+    pdfmetrics.registerFont(TTFont('Tahoma-Bold', 'C:/Windows/Fonts/tahomabd.ttf'))
+    FONT_REGISTERED = True
+except Exception:
+    FONT_REGISTERED = False
+
+__version__ = "2026.0704.2226"
+
+# Thailand Post API Credentials
+API_KEY = "V9JN25IFH5hdZYc1k8NNRVgnLYXyQLzc"
+SHOP_ID = "18488"
+API_USERNAME = "noteratcha"
+API_PASSWORD = "092149506"
+POSTONE_API_URL = "https://postone.thailandpost.com/api/bc.php"
+
+def calculate_check_digit(serial_str):
+    """
+    Calculate Check Digit using Modulus 11 for Thailand Post Barcode.
+    Weights: 8, 6, 4, 2, 3, 5, 9, 7
+    """
+    if len(serial_str) != 8:
+        return "0"
+    
+    weights = [8, 6, 4, 2, 3, 5, 9, 7]
+    total = sum(int(digit) * weight for digit, weight in zip(serial_str, weights))
+    remainder = total % 11
+    
+    if remainder == 0:
+        return "5"
+    elif remainder == 1:
+        return "0"
+    else:
+        return str(11 - remainder)
+
+def fetch_registered_barcodes(cnt):
+    """
+    Fetch `cnt` registered barcodes (typ=2) from Thailand Post API.
+    Returns a list of 13-character barcode strings.
+    """
+    import base64
+    if cnt <= 0:
+        return []
+        
+    auth_str = f"{SHOP_ID}:{API_KEY}"
+    encoded_auth = base64.b64encode(auth_str.encode()).decode()
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Basic {encoded_auth}"
+    }
+    
+    try:
+        response = requests.get(
+            f"{POSTONE_API_URL}?typ=2&cnt={cnt}",
+            headers=headers,
+            timeout=10
+        )
+        # Remove UTF-8 BOM if present
+        text = response.text
+        if text.startswith('\ufeff'):
+            text = text[len('\ufeff'):]
+            
+        import json
+        data = json.loads(text)
+        
+        if data.get("STATUS") == "SUCCESS":
+            prefix = data.get("PRE", "")
+            begin = int(data.get("BEGIN", 0))
+            end = int(data.get("END", 0))
+            
+            if begin > end:
+                print("Error: BEGIN is greater than END")
+                return []
+            
+            barcodes = []
+            for serial in range(begin, end + 1):
+                serial_str = str(serial).zfill(8)
+                check_digit = calculate_check_digit(serial_str)
+                # Depending on how PRE is formatted by the API. If PRE is "RETH", this puts "RE" at front and "TH" at back.
+                # If PRE is just "RE", we append "TH".
+                if len(prefix) >= 4:
+                    full_barcode = f"{prefix[:2]}{serial_str}{check_digit}{prefix[2:4]}"
+                else:
+                    full_barcode = f"{prefix[:2]}{serial_str}{check_digit}TH"
+                barcodes.append(full_barcode)
+                
+            return barcodes
+        else:
+            print(f"API Error: {data.get('STATUS')}")
+            return []
+    except Exception as e:
+        print(f"Failed to fetch barcodes: {e}")
+        return []
 
 # Mapping of Thai digits to Arabic digits
 THAI_TO_ARABIC = str.maketrans('๐๑๒๓๔๕๖๗๘๙', '0123456789')
@@ -359,6 +466,9 @@ def process_pdf(pdf_path):
     return records
 
 def records_to_dataframe(all_records):
+    num_records = len(all_records)
+    barcodes = [] # Barcodes will be fetched later during export
+            
     # Define exact columns matching the DPost template
     columns = [
         'NO', 'COMP_ORDER_ID', 'INV_NO', 'BARCODE_NO', 'PRODUCT_IN_BOX', 
@@ -382,7 +492,13 @@ def records_to_dataframe(all_records):
         if "/" in inv_no:
             comp_order_id = inv_no.split("/")[-1].strip()
         row_data['COMP_ORDER_ID'] = comp_order_id
-        row_data['BARCODE_NO'] = ""
+        
+        # Assign barcode if available
+        if idx - 1 < len(barcodes):
+            row_data['BARCODE_NO'] = barcodes[idx - 1]
+        else:
+            row_data['BARCODE_NO'] = ""
+            
         row_data['PRODUCT_IN_BOX'] = rec.get('PRODUCT IN BOX', '')
         
         row_data['SHIPPER_NAME'] = rec.get('SHIPPER NAME', '')
@@ -417,6 +533,264 @@ def records_to_dataframe(all_records):
         rows.append(row_data)
         
     return pd.DataFrame(rows, columns=columns)
+
+def generate_combined_pdf(dataframe, output_pdf_path):
+    writer = PdfWriter()
+    
+    processed_files = set()
+    
+    for idx, row in dataframe.iterrows():
+        source_file = row.get('SOURCE_FILE', '')
+        if not source_file or not os.path.exists(source_file) or source_file in processed_files:
+            continue
+            
+        processed_files.add(source_file)
+        
+        # Get all records for this file in original order
+        file_records = dataframe[dataframe['SOURCE_FILE'] == source_file].to_dict('records')
+        
+        reader = PdfReader(source_file)
+        if not reader.pages:
+            continue
+            
+        current_record_idx = 0
+                
+        for i, page in enumerate(reader.pages):
+            text = page.extract_text() or ""
+            clean_text = text.replace(" ", "")
+            
+            is_envelope = "ชำระค่าฝากส่งเป็นรายเดือน" in clean_text or "ใบอนุญาตเลขที่" in clean_text
+            is_last_page = (i == len(reader.pages) - 1)
+            
+            if (is_envelope or is_last_page) and current_record_idx < len(file_records):
+                barcode_no = file_records[current_record_idx].get('BARCODE_NO', '')
+                
+                if barcode_no and str(barcode_no).strip() != "":
+                    width = float(page.mediabox.width)
+                    height = float(page.mediabox.height)
+                
+                packet = io.BytesIO()
+                c = canvas.Canvas(packet, pagesize=(width, height))
+                
+                # Coordinates for bottom left red box, 5% from left edge
+                base_x = width * 0.05
+                base_y = 20
+                
+                # Draw Barcode (Code128) - size increased by 10% again
+                barcode128 = code128.Code128(str(barcode_no), barHeight=20.625, barWidth=0.825)
+                barcode128.drawOn(c, base_x, base_y + 40)
+                
+                # Get actual width for perfect centering
+                barcode_width = getattr(barcode128, 'width', 164.7)
+                center_x = base_x + (barcode_width / 2.0)
+                
+                # Draw text centered under barcode
+                c.setFont("Helvetica-Bold", 14)
+                c.drawCentredString(center_x, base_y + 20, str(barcode_no))
+                
+                # Draw QR Code centered above barcode
+                qr_code = qr.QrCodeWidget(str(barcode_no))
+                bounds = qr_code.getBounds()
+                qr_width = bounds[2] - bounds[0]
+                qr_height = bounds[3] - bounds[1]
+                
+                # Scale QR code to 75x75 pts (50% larger)
+                scale_w = 75.0 / qr_width
+                scale_h = 75.0 / qr_height
+                d = Drawing(75, 75, transform=[scale_w, 0, 0, scale_h, 0, 0])
+                d.add(qr_code)
+                # Centered: center_x - 37.5, Y: above barcode (base_y + 65)
+                renderPDF.draw(d, c, center_x - 37.5, base_y + 65)
+                
+                # --- Draw E-AR Box above QR Code ---
+                box_w = 110
+                box_h = 45
+                box_x = center_x - (box_w / 2.0)
+                box_y = base_y + 145  # 145 is above the QR code (65 + 75 = 140)
+                
+                c.setStrokeColorRGB(0, 0, 0) # Black border
+                c.setLineWidth(1)
+                c.setFillColorRGB(1, 1, 1) # White fill
+                c.rect(box_x, box_y, box_w, box_h, fill=1, stroke=1)
+                
+                c.setFillColorRGB(0, 0, 0)
+                if FONT_REGISTERED:
+                    c.setFont('Tahoma-Bold', 18)
+                else:
+                    c.setFont('Helvetica-Bold', 18)
+                c.drawCentredString(center_x, box_y + 26, "e-AR")
+                
+                if FONT_REGISTERED:
+                    c.setFont('Tahoma', 9)
+                else:
+                    c.setFont('Helvetica', 9)
+                c.drawCentredString(center_x, box_y + 14, "ลงทะเบียนตอบรับ")
+                c.drawCentredString(center_x, box_y + 4, "ทางอิเล็กทรอนิกส์")
+                # -----------------------------------
+                
+                c.save()
+                packet.seek(0)
+                
+                overlay_pdf = PdfReader(packet)
+                page.merge_page(overlay_pdf.pages[0])
+                
+                current_record_idx += 1
+                
+            writer.add_page(page)
+        
+    with open(output_pdf_path, "wb") as f_out:
+        writer.write(f_out)
+
+def generate_delivery_note_pdf(dataframe, output_pdf_path):
+    if dataframe.empty:
+        return
+        
+    doc = SimpleDocTemplate(output_pdf_path, pagesize=portrait(A4),
+                            rightMargin=1.5*cm, leftMargin=1.5*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+    elements = []
+    
+    styles = getSampleStyleSheet()
+    font_name = 'Tahoma' if FONT_REGISTERED else 'Helvetica'
+    font_bold = 'Tahoma-Bold' if FONT_REGISTERED else 'Helvetica-Bold'
+    
+    style_normal = ParagraphStyle('ThaiNormal', parent=styles['Normal'], fontName=font_name, fontSize=10, leading=14)
+    style_bold_center = ParagraphStyle('ThaiBoldCenter', parent=styles['Normal'], fontName=font_bold, fontSize=16, alignment=TA_CENTER)
+    style_right = ParagraphStyle('ThaiRight', parent=styles['Normal'], fontName=font_name, fontSize=10, alignment=TA_RIGHT, leading=24)
+    style_table_header = ParagraphStyle('ThaiTableHeader', parent=styles['Normal'], fontName=font_bold, fontSize=10, alignment=TA_CENTER)
+    style_table_cell_left = ParagraphStyle('ThaiTableCellL', parent=styles['Normal'], fontName=font_name, fontSize=9, leading=12)
+    style_table_cell_center = ParagraphStyle('ThaiTableCellC', parent=styles['Normal'], fontName=font_name, fontSize=9, leading=12, alignment=TA_CENTER)
+    style_footer_center = ParagraphStyle('ThaiFooterCenter', parent=styles['Normal'], fontName=font_name, fontSize=10, leading=24, alignment=TA_CENTER)
+    
+    # Get shipper info from the first row
+    first_row = dataframe.iloc[0]
+    shipper_name = str(first_row.get('SHIPPER_NAME', ''))
+    shipper_addr = str(first_row.get('SHIPPER_ADDRESS', ''))
+    shipper_amphur = str(first_row.get('SHIPPER_AMPHUR', ''))
+    shipper_prov = str(first_row.get('SHIPPER_PROVINCE', ''))
+    shipper_zip = str(first_row.get('SHIPPER_ZIPCODE', ''))
+    shipper_tel = str(first_row.get('SHIPPER_TEL', ''))
+    
+    shipper_full_address = f"{shipper_addr} {shipper_amphur} {shipper_prov} {shipper_zip}".strip()
+    shipper_text = f"<b>ผู้ส่ง:</b> {shipper_name}<br/><b>ที่อยู่:</b> {shipper_full_address}<br/><b>โทร:</b> {shipper_tel}"
+    
+    p_shipper = Paragraph(shipper_text, style_normal)
+    p_title = Paragraph('ใบนำส่ง', style_bold_center)
+    p_license = Paragraph('ใบอนุญาตเลขที่............................................<br/>ปณ./ปจ. ............................................', style_right)
+    
+    # Shipper and License row (2 columns)
+    header_data = [[p_shipper, p_license]]
+    header_table = Table(header_data, colWidths=[9*cm, 9*cm])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ALIGN', (0,0), (0,0), 'LEFT'),
+        ('ALIGN', (1,0), (1,0), 'RIGHT'),
+    ]))
+    
+    # Table Data (wrapping header inside to repeat on every page)
+    main_table_data = []
+    
+    # Row 0: Title on top (spans all columns)
+    main_table_data.append([p_title, '', '', '', '', ''])
+    
+    # Row 1: Header table (spans all columns)
+    main_table_data.append([header_table, '', '', '', '', ''])
+    
+    # Row 2: Spacer row
+    main_table_data.append(['', '', '', '', '', ''])
+    
+    # Row 3: Column Headers
+    main_table_data.append([
+        Paragraph('ลำดับ', style_table_header),
+        Paragraph('หมายเลข', style_table_header),
+        Paragraph('ผู้รับ', style_table_header),
+        Paragraph('ที่อยู่', style_table_header),
+        Paragraph('น้ำหนัก', style_table_header),
+        Paragraph('ค่าบริการ', style_table_header)
+    ])
+    
+    for idx, row in dataframe.iterrows():
+        no = str(row.get('NO', idx + 1))
+        barcode = str(row.get('BARCODE_NO', ''))
+        receiver = str(row.get('RECEIVER', ''))
+        
+        r_addr = str(row.get('RECEIVER_ADDRESS', ''))
+        r_amphur = str(row.get('RECEIVER_AMPHUR', ''))
+        r_prov = str(row.get('RECEIVER_PROVINCE', ''))
+        r_zip = str(row.get('RECEIVER_ZIPCODE', ''))
+        
+        # Use <br/> to break line before Amphur
+        addr_line1 = r_addr.strip()
+        addr_line2 = f"{r_amphur} {r_prov} {r_zip}".strip()
+        full_r_addr = f"{addr_line1}<br/>{addr_line2}" if addr_line1 and addr_line2 else f"{addr_line1}{addr_line2}"
+        
+        weight = str(row.get('WEIGHT', ''))
+        
+        main_table_data.append([
+            Paragraph(no, style_table_cell_center),
+            Paragraph(barcode, style_table_cell_center),
+            Paragraph(receiver, style_table_cell_left),
+            Paragraph(full_r_addr, style_table_cell_left),
+            Paragraph(weight, style_table_cell_center),
+            Paragraph('', style_table_cell_center) # Empty for service fee
+        ])
+        
+    # Adjusted column widths to prevent header text wrapping
+    # [ลำดับ 1.5, หมายเลข 3.0, ผู้รับ 4.0, ที่อยู่ 5.8, น้ำหนัก 1.7, ค่าบริการ 2.0] = Total 18.0cm
+    t = Table(main_table_data, colWidths=[1.5*cm, 3.0*cm, 4.0*cm, 5.8*cm, 1.7*cm, 2.0*cm], repeatRows=4)
+    t.setStyle(TableStyle([
+        # Header spans
+        ('SPAN', (0,0), (-1,0)),
+        ('SPAN', (0,1), (-1,1)),
+        ('SPAN', (0,2), (-1,2)),
+        
+        ('LEFTPADDING', (0,0), (-1,2), 0),
+        ('RIGHTPADDING', (0,0), (-1,2), 0),
+        ('BOTTOMPADDING', (0,0), (-1,0), 15), # Space under title
+        ('BOTTOMPADDING', (0,1), (-1,1), 10), # Space after header table
+        
+        # Grid and Background only for data rows and col headers
+        ('BACKGROUND', (0,3), (-1,3), colors.lightgrey),
+        ('TEXTCOLOR', (0,0), (-1,-1), colors.black),
+        ('ALIGN', (0,3), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('GRID', (0,3), (-1,-1), 0.5, colors.black),
+        ('BOTTOMPADDING', (0,3), (-1,-1), 4),
+        ('TOPPADDING', (0,3), (-1,-1), 4),
+        ('LEFTPADDING', (0,3), (-1,-1), 2),  # Reduce left padding in cells
+        ('RIGHTPADDING', (0,3), (-1,-1), 2), # Reduce right padding in cells
+    ]))
+    
+    elements.append(t)
+    elements.append(Spacer(1, 1*cm))
+    
+    # Footer
+    footer_text_left = '<br/><br/>ลงชื่อผู้ส่ง ..............................................................<br/>( .............................................................. )<br/>วันที่.............................................'
+    footer_text_right = '<br/><br/>ลงชื่อผู้รับ ..............................................................<br/>( .............................................................. )<br/>วันที่.............................................'
+    
+    p_footer_l = Paragraph(footer_text_left, style_footer_center)
+    p_footer_r = Paragraph(footer_text_right, style_footer_center)
+    
+    footer_data = [[p_footer_l, p_footer_r]]
+    footer_table = Table(footer_data, colWidths=[9*cm, 9*cm])
+    footer_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ALIGN', (0,0), (0,0), 'CENTER'),
+        ('ALIGN', (1,0), (1,0), 'CENTER'),
+    ]))
+    
+    elements.append(footer_table)
+    
+    def draw_page_number(canvas, doc):
+        canvas.saveState()
+        if FONT_REGISTERED:
+            canvas.setFont('Tahoma', 9)
+        else:
+            canvas.setFont('Helvetica', 9)
+        canvas.drawRightString(19.5*cm, 28.5*cm, f"หน้า {doc.page}")
+        canvas.restoreState()
+        
+    doc.build(elements, onFirstPage=draw_page_number, onLaterPages=draw_page_number)
 
 def main():
     print(f"โปรแกรมแปลงข้อมูล DPost (Version {__version__})")
