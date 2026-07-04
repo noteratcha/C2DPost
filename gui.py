@@ -168,7 +168,7 @@ class DPostConverterGUI(ctk.CTk):
         self.tree.bind("<Leave>", self.on_tree_leave)
         
         self.columns = [
-            ("View", "ดู", 40),
+            ("View", "ดู  │", 55),
             ("No", "ลำดับ", 50),
             ("Ref", "เลขที่อ้างอิง", 120),
             ("Receiver", "ผู้รับ", 180),
@@ -243,7 +243,7 @@ class DPostConverterGUI(ctk.CTk):
                 addr = ' '.join(addr.split())
                 tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
                 self.tree.insert("", "end", iid=str(idx), image=self.gray_x_img, values=(
-                    "🔍",
+                    "🔍   │",
                     idx + 1,
                     row.get('INV_NO', ''),
                     row.get('RECEIVER', ''),
@@ -287,8 +287,8 @@ class DPostConverterGUI(ctk.CTk):
                         self.tree.selection_set(item)
                         self.delete_selected()
                 elif column == "#1":  # Column #1 is the View column
-                    # Center is 75 (50 + 25), allow click only within 65 to 85 (20px width)
-                    if 65 <= event.x <= 85:
+                    # Center is 75 (50 + 25), allow click only within 60 to 80 (to account for the shifted icon due to the separator)
+                    if 60 <= event.x <= 80:
                         self.tree.selection_set(item)
                         self.open_pdf()
 
@@ -312,7 +312,7 @@ class DPostConverterGUI(ctk.CTk):
                     self._hovered_item = item
                 self.show_tooltip("ลบรายการ", event.x_root + 15, event.y_root + 15)
                 return
-            elif column == "#1" and (65 <= event.x <= 85):
+            elif column == "#1" and (60 <= event.x <= 80):
                 self.tree.configure(cursor="hand2")
                 if current_hovered:
                     try:
