@@ -108,10 +108,7 @@ class DPostConverterGUI(ctk.CTk):
                                                 font=("Segoe UI", 12, "bold"), command=self.select_files, width=150, height=36)
         self.btn_select_files.pack(side='left', padx=(0, 10))
         
-        self.btn_clear = ctk.CTkButton(btn_frame, text=" 🧹 ล้างข้อมูล ", fg_color="#f1f5f9", 
-                                       hover_color="#fecaca", text_color="#ef4444",
-                                       font=("Segoe UI", 12, "bold"), command=self.clear_selection, width=100, height=36)
-        self.btn_clear.pack(side='left')
+        # Removed btn_clear from here to place it in preview_header
         
         self.center_frame = ctk.CTkFrame(btn_frame, fg_color="transparent")
         self.center_frame.pack(side='left', fill='both', expand=True, padx=30)
@@ -140,6 +137,11 @@ class DPostConverterGUI(ctk.CTk):
         # Right aligned stats and search
         self.search_entry = ctk.CTkEntry(preview_header, placeholder_text=" 🔍 ค้นหาผู้รับ / เลขอ้างอิง... ", width=250, height=30, font=("Segoe UI", 11), corner_radius=15)
         self.search_entry.pack(side='right', padx=(15, 0))
+        
+        self.btn_clear = ctk.CTkButton(preview_header, text=" 🧹 ล้างข้อมูล ", fg_color="#f1f5f9", 
+                                       hover_color="#fecaca", text_color="#ef4444",
+                                       font=("Segoe UI", 11, "bold"), command=self.clear_selection, width=95, height=30, corner_radius=15)
+        self.btn_clear.pack(side='right', padx=(10, 0))
         
         self.lbl_stat_records = ctk.CTkLabel(preview_header, text="👥 รายการผู้รับ: 0 รายการ", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
         self.lbl_stat_records.pack(side='right', padx=10)
