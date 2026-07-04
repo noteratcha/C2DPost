@@ -72,22 +72,24 @@ class DPostConverterGUI(ctk.CTk):
         
         ctk.CTkLabel(header, text="สำนักงานที่ดิน", font=("Segoe UI", 18, "bold"), text_color="#ffffff").pack(side='left', padx=30)
         
-        # Steps Indicator
-        steps_frame = ctk.CTkFrame(header, fg_color="transparent")
-        steps_frame.pack(side='right', padx=30)
+        # Steps Indicator Container (Pill shape)
+        steps_frame = ctk.CTkFrame(header, fg_color="#0f5128", corner_radius=16)
+        steps_frame.pack(side='right', padx=30, pady=10)
         
-        ctk.CTkLabel(steps_frame, text="💡 ขั้นตอนการทำงาน:", font=("Segoe UI", 12), text_color="#ffffff").pack(side='left', padx=(0, 15))
+        self.lbl_step1 = ctk.CTkLabel(steps_frame, text=" 1. เลือกไฟล์ PDF ", font=("Segoe UI", 11), corner_radius=12)
+        self.lbl_step1.pack(side='left', padx=(6, 2), pady=4, ipady=2)
         
-        self.lbl_step1 = ctk.CTkLabel(steps_frame, text=" [1] เลือกไฟล์ PDF ", font=("Segoe UI", 11, "bold"), text_color="#ffffff", fg_color="#166534", corner_radius=6)
-        self.lbl_step1.pack(side='left', padx=5, ipady=3)
-        ctk.CTkLabel(steps_frame, text="➔", font=("Segoe UI", 12), text_color="#86efac").pack(side='left', padx=2)
+        self.arrow1 = ctk.CTkLabel(steps_frame, text="→", font=("Segoe UI", 11, "bold"), text_color="#a7f3d0")
+        self.arrow1.pack(side='left', padx=2)
         
-        self.lbl_step2 = ctk.CTkLabel(steps_frame, text=" [2] พรีวิวข้อมูล ", font=("Segoe UI", 11, "bold"), text_color="#ffffff", fg_color="#166534", corner_radius=6)
-        self.lbl_step2.pack(side='left', padx=5, ipady=3)
-        ctk.CTkLabel(steps_frame, text="➔", font=("Segoe UI", 12), text_color="#86efac").pack(side='left', padx=2)
+        self.lbl_step2 = ctk.CTkLabel(steps_frame, text=" 2. พรีวิวข้อมูล ", font=("Segoe UI", 11), corner_radius=12)
+        self.lbl_step2.pack(side='left', padx=2, pady=4, ipady=2)
         
-        self.lbl_step3 = ctk.CTkLabel(steps_frame, text=" [3] บันทึกไฟล์ Excel ", font=("Segoe UI", 11, "bold"), text_color="#14532d", fg_color="#86efac", corner_radius=6)
-        self.lbl_step3.pack(side='left', padx=5, ipady=3)
+        self.arrow2 = ctk.CTkLabel(steps_frame, text="→", font=("Segoe UI", 11, "bold"), text_color="#a7f3d0")
+        self.arrow2.pack(side='left', padx=2)
+        
+        self.lbl_step3 = ctk.CTkLabel(steps_frame, text=" 3. บันทึกไฟล์ Excel ", font=("Segoe UI", 11), corner_radius=12)
+        self.lbl_step3.pack(side='left', padx=(2, 6), pady=4, ipady=2)
         
         # Main Container
         container = ctk.CTkFrame(self, fg_color="transparent")
@@ -220,12 +222,27 @@ class DPostConverterGUI(ctk.CTk):
         self.tree.tag_configure('evenrow', background="#f8fafc")
 
     def set_step(self, step):
-        inactive_color = "#166534"
+        inactive_color = "transparent"
         active_color = "#86efac"
         
-        self.lbl_step1.configure(fg_color=active_color if step == 1 else inactive_color, text_color="#14532d" if step == 1 else "#ffffff")
-        self.lbl_step2.configure(fg_color=active_color if step == 2 else inactive_color, text_color="#14532d" if step == 2 else "#ffffff")
-        self.lbl_step3.configure(fg_color=active_color if step == 3 else inactive_color, text_color="#14532d" if step == 3 else "#ffffff")
+        inactive_text = "#a7f3d0"
+        active_text = "#14532d"
+        
+        self.lbl_step1.configure(
+            fg_color=active_color if step == 1 else inactive_color, 
+            text_color=active_text if step == 1 else inactive_text,
+            font=("Segoe UI", 11, "bold" if step == 1 else "normal")
+        )
+        self.lbl_step2.configure(
+            fg_color=active_color if step == 2 else inactive_color, 
+            text_color=active_text if step == 2 else inactive_text,
+            font=("Segoe UI", 11, "bold" if step == 2 else "normal")
+        )
+        self.lbl_step3.configure(
+            fg_color=active_color if step == 3 else inactive_color, 
+            text_color=active_text if step == 3 else inactive_text,
+            font=("Segoe UI", 11, "bold" if step == 3 else "normal")
+        )
 
     def filter_treeview(self, event=None):
         query = self.search_entry.get().strip().lower()
