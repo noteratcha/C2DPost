@@ -404,14 +404,13 @@ class DPostConverterGUI(ctk.CTk):
 
     def show_tooltip(self, text, x, y):
         if self.tooltip_window:
-            self.tooltip_window.geometry(f"+{x}+{y}")
             if hasattr(self, 'tooltip_label') and self.tooltip_label:
                 self.tooltip_label.configure(text=text)
+            self.position_tooltip(x, y)
             return
             
         self.tooltip_window = tk.Toplevel(self)
         self.tooltip_window.wm_overrideredirect(True)
-        self.tooltip_window.geometry(f"+{x}+{y}")
         
         # Style the tooltip
         self.tooltip_label = tk.Label(self.tooltip_window, text=text, justify='left',
@@ -419,6 +418,18 @@ class DPostConverterGUI(ctk.CTk):
                          font=("Segoe UI", 9),
                          relief='flat', borderwidth=0, padx=6, pady=4)
         self.tooltip_label.pack(ipadx=1)
+        self.position_tooltip(x, y)
+
+    def position_tooltip(self, x, y):
+        self.tooltip_window.update_idletasks()
+        width = self.tooltip_window.winfo_width()
+        screen_width = self.winfo_screenwidth()
+        
+        # If the tooltip extends beyond the right edge of the screen
+        if x + width > screen_width:
+            x = x - width - 25  # Shift to the left of the cursor
+            
+        self.tooltip_window.geometry(f"+{x}+{y}")
 
     def hide_tooltip(self):
         if self.tooltip_window:
