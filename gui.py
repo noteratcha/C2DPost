@@ -135,7 +135,7 @@ class DPostConverterGUI(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(self.status_box, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 12), text_color=COLOR_PRIMARY)
         self.lbl_status.pack(fill='both', expand=True, pady=(8, 8))
         
-        self.btn_export = ctk.CTkButton(btn_frame, text=" ✖ บันทึกไฟล์ Excel... ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
+        self.btn_export = ctk.CTkButton(btn_frame, text=" 📥 บันทึกไฟล์ Excel ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
                                         font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=170, height=36)
         self.btn_export.pack(side='right')
         
