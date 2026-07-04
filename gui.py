@@ -241,7 +241,7 @@ class DPostConverterGUI(ctk.CTk):
 
         self.tree.tag_configure('oddrow', background="#ffffff")
         self.tree.tag_configure('evenrow', background="#f8fafc")
-        self.tree.tag_configure('hover', foreground="#15803d")
+        self.tree.tag_configure('hover', foreground="#ea580c")
         
 
 
