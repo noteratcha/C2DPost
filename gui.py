@@ -185,7 +185,8 @@ class DPostConverterGUI(ctk.CTk):
         
         for col_id, col_name, col_width in self.columns:
             self.tree.heading(col_id, text=col_name, command=lambda _col=col_id: self.sort_treeview(_col, False))
-            self.tree.column(col_id, width=col_width, minwidth=50, anchor='w' if col_id in ["Receiver", "Address"] else 'center')
+            stretch = False if col_id == "View" else True
+            self.tree.column(col_id, width=col_width, minwidth=col_width if col_id == "View" else 50, stretch=stretch, anchor='w' if col_id in ["Receiver", "Address"] else 'center')
             
         self.set_step(1)
 
@@ -281,11 +282,15 @@ class DPostConverterGUI(ctk.CTk):
             item = self.tree.identify_row(event.y)
             if item:
                 if column == "#0":  # Column #0 is the tree column (Delete)
-                    self.tree.selection_set(item)
-                    self.delete_selected()
+                    # Center is 27.5, allow click only within 17 to 37 (20px width)
+                    if 17 <= event.x <= 37:
+                        self.tree.selection_set(item)
+                        self.delete_selected()
                 elif column == "#1":  # Column #1 is the View column
-                    self.tree.selection_set(item)
-                    self.open_pdf()
+                    # Center is 75 (55 + 20), allow click only within 65 to 85 (20px width)
+                    if 65 <= event.x <= 85:
+                        self.tree.selection_set(item)
+                        self.open_pdf()
 
     def on_tree_motion(self, event):
         region = self.tree.identify_region(event.x, event.y)
@@ -295,7 +300,7 @@ class DPostConverterGUI(ctk.CTk):
         current_hovered = getattr(self, '_hovered_item', None)
         
         if region in ["cell", "tree"] and item:
-            if column == "#0":
+            if column == "#0" and (17 <= event.x <= 37):
                 self.tree.configure(cursor="hand2")
                 if current_hovered != item:
                     if current_hovered:
@@ -307,7 +312,7 @@ class DPostConverterGUI(ctk.CTk):
                     self._hovered_item = item
                 self.show_tooltip("ลบรายการ", event.x_root + 15, event.y_root + 15)
                 return
-            elif column == "#1":
+            elif column == "#1" and (65 <= event.x <= 85):
                 self.tree.configure(cursor="hand2")
                 if current_hovered:
                     try:
