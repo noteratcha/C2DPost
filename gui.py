@@ -124,9 +124,6 @@ class DPostConverterGUI(ctk.CTk):
         self.search_entry = ctk.CTkEntry(preview_header, placeholder_text=" 🔍 ค้นหาผู้รับ / เลขอ้างอิง... ", width=250, height=30, font=("Segoe UI", 11), corner_radius=15)
         self.search_entry.pack(side='right', padx=(15, 0))
         
-        self.btn_delete_item = ctk.CTkButton(preview_header, text=" ❌ ลบรายการที่เลือก ", fg_color="#fee2e2", hover_color="#fecaca", text_color="#ef4444", font=("Segoe UI", 11, "bold"), width=130, height=30, corner_radius=15, command=self.delete_selected)
-        self.btn_delete_item.pack(side='right', padx=(10, 0))
-        
         self.lbl_stat_records = ctk.CTkLabel(preview_header, text="👥 รายการผู้รับ: 0 รายการ", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
         self.lbl_stat_records.pack(side='right', padx=10)
         
@@ -150,8 +147,10 @@ class DPostConverterGUI(ctk.CTk):
         vsb.pack(side='right', fill='y')
         self.tree.pack(side='left', fill='both', expand=True)
         self.tree.bind("<Double-1>", self.open_pdf)
+        self.tree.bind("<ButtonRelease-1>", self.on_tree_click)
         
         self.columns = [
+            ("Delete", "ลบ", 40),
             ("No", "ลำดับ", 50),
             ("Ref", "เลขที่อ้างอิง", 120),
             ("Receiver", "ผู้รับ", 180),
@@ -221,6 +220,7 @@ class DPostConverterGUI(ctk.CTk):
                 addr = ' '.join(addr.split())
                 tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
                 self.tree.insert("", "end", iid=str(idx), values=(
+                    "❌",
                     idx + 1,
                     row.get('INV_NO', ''),
                     row.get('RECEIVER', ''),
@@ -251,6 +251,16 @@ class DPostConverterGUI(ctk.CTk):
         for index, (val, k) in enumerate(items):
             self.tree.move(k, '', index)
         self.tree.heading(col_id, command=lambda: self.sort_treeview(col_id, not reverse))
+
+    def on_tree_click(self, event):
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "cell":
+            column = self.tree.identify_column(event.x)
+            if column == "#1":  # Column index starts at #1 for the first column
+                item = self.tree.identify_row(event.y)
+                if item:
+                    self.tree.selection_set(item)
+                    self.delete_selected()
 
     def delete_selected(self, event=None):
         import tkinter.messagebox as messagebox
