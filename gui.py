@@ -53,8 +53,8 @@ class DPostConverterGUI(ctk.CTk):
         self.red_x_img = self.create_cross_image("#ef4444")
         self.tooltip_window = None
 
-        # Initialize drag and drop
-        windnd.hook_dropfiles(self, self.handle_dropped_files)
+        # Initialize drag and drop after the window is fully mapped to prevent WinProc subclassing crash
+        self.after(100, lambda: windnd.hook_dropfiles(self, self.handle_dropped_files))
 
     def create_cross_image(self, color):
         img = tk.PhotoImage(width=16, height=16)
