@@ -512,6 +512,10 @@ class DPostConverterGUI(ctk.CTk):
             lbl.pack(fill='x', pady=2)
 
     def clear_selection(self):
+        if self.selected_files or (self.dataframe is not None and not self.dataframe.empty):
+            if not messagebox.askyesno("ยืนยันการล้างข้อมูล", "คุณต้องการล้างข้อมูลผู้รับและไฟล์ PDF ทั้งหมดที่เลือกไว้ใช่หรือไม่?"):
+                return
+                
         self.selected_files = []
         self.parsed_records = []
         self.dataframe = None
