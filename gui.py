@@ -124,6 +124,9 @@ class DPostConverterGUI(ctk.CTk):
         self.search_entry = ctk.CTkEntry(preview_header, placeholder_text=" 🔍 ค้นหาผู้รับ / เลขอ้างอิง... ", width=250, height=30, font=("Segoe UI", 11), corner_radius=15)
         self.search_entry.pack(side='right', padx=(15, 0))
         
+        self.btn_delete_item = ctk.CTkButton(preview_header, text=" ❌ ลบรายการที่เลือก ", fg_color="#fee2e2", hover_color="#fecaca", text_color="#ef4444", font=("Segoe UI", 11, "bold"), width=130, height=30, corner_radius=15, command=self.delete_selected)
+        self.btn_delete_item.pack(side='right', padx=(10, 0))
+        
         self.lbl_stat_records = ctk.CTkLabel(preview_header, text="👥 รายการผู้รับ: 0 รายการ", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
         self.lbl_stat_records.pack(side='right', padx=10)
         
@@ -248,6 +251,47 @@ class DPostConverterGUI(ctk.CTk):
         for index, (val, k) in enumerate(items):
             self.tree.move(k, '', index)
         self.tree.heading(col_id, command=lambda: self.sort_treeview(col_id, not reverse))
+
+    def delete_selected(self, event=None):
+        import tkinter.messagebox as messagebox
+        selected_items = self.tree.selection()
+        if not selected_items:
+            messagebox.showwarning("ข้อแนะนำ", "กรุณาคลิกเลือกรายการในตารางที่ต้องการลบก่อนครับ")
+            return
+            
+        if not messagebox.askyesno("ยืนยันการลบ", "คุณต้องการลบข้อมูลที่เลือกใช่หรือไม่?\n\n(ระบบจะนำไฟล์ PDF ต้นฉบับของข้อมูลเหล่านี้ออกจากรายการด้วย)"):
+            return
+            
+        try:
+            indices_to_delete = [int(iid) for iid in selected_items]
+            
+            files_to_remove = set()
+            if self.dataframe is not None and not self.dataframe.empty and 'SOURCE_FILE' in self.dataframe.columns:
+                for idx in indices_to_delete:
+                    if idx in self.dataframe.index:
+                        files_to_remove.add(self.dataframe.loc[idx, 'SOURCE_FILE'])
+                        
+            if files_to_remove:
+                # Remove from selected_files
+                self.selected_files = [f for f in self.selected_files if f not in files_to_remove]
+                
+                # Remove ALL rows from dataframe that belong to these files
+                self.dataframe = self.dataframe[~self.dataframe['SOURCE_FILE'].isin(files_to_remove)]
+                
+                # Reset index of dataframe so idx matches row numbers again
+                self.dataframe.reset_index(drop=True, inplace=True)
+                self.parsed_records = self.dataframe.to_dict('records') if not self.dataframe.empty else []
+                
+                # Update UI
+                self.lbl_stat_files.configure(text=f"📄 ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
+                self.lbl_stat_records.configure(text=f"👥 รายการผู้รับ: {len(self.dataframe)} รายการ")
+                
+                if self.dataframe.empty:
+                    self.clear_selection()
+                else:
+                    self.filter_treeview()
+        except Exception as e:
+            messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถลบรายการได้เนื่องจาก:\n{str(e)}")
 
     def open_pdf(self, event=None):
         import tkinter.messagebox as messagebox
