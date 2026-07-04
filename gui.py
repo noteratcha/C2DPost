@@ -111,6 +111,10 @@ class DPostConverterGUI(ctk.CTk):
                                  command=self.show_supported_docs)
         btn_info.pack(side='right', padx=30)
         
+        # Bind hover tooltip to show 'เอกสารที่รองรับ'
+        btn_info.bind("<Enter>", lambda event: self.show_tooltip("เอกสารที่รองรับ", event.x_root + 10, event.y_root + 10))
+        btn_info.bind("<Leave>", lambda event: self.hide_tooltip())
+        
         # Main Container
         container = ctk.CTkFrame(self, fg_color="transparent")
         container.pack(fill='both', expand=True, padx=20, pady=15)
