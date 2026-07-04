@@ -9,3 +9,6 @@
 - **Windows API Integration**: การเรียกใช้โมดูล winsound พื้นฐานสำหรับการแจ้งเตือน
 - **Agent Configuration**: การปรับแต่งกฎและพฤติกรรมการทำงานของตัวระบบ (AGENTS.md)
 - **Standard Naming Conventions**: การตั้งชื่อมาตรฐานตามเวลาปัจจุบัน
+- **PyInstaller Compilation**: ในโปรเจกต์นี้มีการใช้งาน `reportlab.graphics.barcode` ซึ่งจะดึงโมดูลย่อย (เช่น code93) เข้ามาแบบไดนามิกตอนรันไทม์ ดังนั้นหากจะใช้ PyInstaller ห้ามลืมกำหนด `--collect-all reportlab` หรือเพิ่ม `collect_all('reportlab')` ในไฟล์ .spec เด็ดขาด เพื่อป้องกันบัค ModuleNotFoundError แบบหลบใน
+- **ReportLab Thai Vowel Adjustment**: การแก้ปัญหาสระ/วรรณยุกต์จมเมื่อใช้ฟอนต์ Tahoma โดยการแทรกแท็ก Markup ของระบบ ReportLab (เช่น `<super>`) หน้าวรรณยุกต์เมื่ออยู่บนสระบน เพื่อผลักให้วรรณยุกต์ลอยขึ้นมาโดยไม่ต้องพึ่งพาฟอนต์ที่มี PUA
+- **Pandas Index Sequence Management**: การรีเซ็ตค่าคอลัมน์ที่เป็นลำดับ (เช่น NO) ใหม่อย่างชัดเจนหลังจากการลบข้อมูล (Delete) หรือต่อข้อมูล (Concat) โดยใช้ `list(range(1, len(df) + 1))` เพื่อรับประกันว่าเลขลำดับจะเรียงต่อเนื่องเสมอและป้องกันบัคจากการใช้คำสั่ง `range()` เพียวๆ ในระบบ Pandas เก่า

@@ -10,12 +10,11 @@ import customtkinter as ctk
 
 try:
     from convert_dpost import process_pdf, records_to_dataframe, fetch_registered_barcodes, generate_combined_pdf, generate_delivery_note_pdf, __version__
-except ImportError:
-    __version__ = "2026.0704.2226"
-    def process_pdf(path): return []
-    def records_to_dataframe(recs): return pd.DataFrame()
-    def fetch_registered_barcodes(num): return []
-
+except Exception as e:
+    import traceback
+    traceback.print_exc()
+    messagebox.showerror("Critical Error", f"Failed to load convert_dpost:\n{str(e)}")
+    sys.exit(1)
 ctk.set_appearance_mode("light")
 
 # Colors matching the user's screenshot
@@ -518,6 +517,11 @@ class DPostConverterGUI(ctk.CTk):
                 
                 # Reset index of dataframe so idx matches row numbers again
                 self.dataframe.reset_index(drop=True, inplace=True)
+                
+                # Recalculate NO column after deletion
+                if 'NO' in self.dataframe.columns:
+                    self.dataframe['NO'] = list(range(1, len(self.dataframe) + 1))
+                    
                 self.parsed_records = self.dataframe.to_dict('records') if not self.dataframe.empty else []
                 
                 # Update UI
@@ -678,6 +682,12 @@ class DPostConverterGUI(ctk.CTk):
         self.progress.pack_forget()
         self.lbl_status.pack(pady=(8, 8)) # restore padding
         
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONINFORMATION)
+        except Exception:
+            pass
+        
         if errors:
             error_list = "\n".join(f"- {err}" for err in errors[:10])
             if len(errors) > 10:
@@ -703,6 +713,10 @@ class DPostConverterGUI(ctk.CTk):
             else:
                 # Merge dataframes
                 self.dataframe = pd.concat([self.dataframe, new_df], ignore_index=True)
+                
+            # Recalculate NO column to ensure continuous sequence across multiple files
+            if 'NO' in self.dataframe.columns:
+                self.dataframe['NO'] = list(range(1, len(self.dataframe) + 1))
                 
             self.parsed_records = self.dataframe.to_dict('records')
             
@@ -827,9 +841,20 @@ class DPostConverterGUI(ctk.CTk):
                     if os.path.exists(delivery_note_filepath):
                         os.startfile(delivery_note_filepath)
             except Exception as e:
+                try:
+                    import winsound
+                    winsound.MessageBeep(winsound.MB_ICONHAND)
+                except Exception:
+                    pass
                 messagebox.showerror("ข้อผิดพลาด", f"ไม่สามารถบันทึกไฟล์ได้:\n{str(e)}")
 
     def show_success_dialog(self, excel_path, pdf_path, delivery_path):
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_OK)
+        except Exception:
+            pass
+            
         dialog = ctk.CTkToplevel(self)
         dialog.title("บันทึกไฟล์สำเร็จ")
         dialog.geometry("450x300")

@@ -25,7 +25,7 @@ try:
 except Exception:
     FONT_REGISTERED = False
 
-__version__ = "2026.0704.2226"
+__version__ = "2026.0704.2324"
 
 # Thailand Post API Credentials
 API_KEY = "V9JN25IFH5hdZYc1k8NNRVgnLYXyQLzc"
@@ -120,6 +120,29 @@ def clean_thai_digits(text):
     if not text:
         return ""
     return text.translate(THAI_TO_ARABIC)
+
+def apply_thai_pua(text):
+    """
+    Since Tahoma does not have MacThai PUA glyphs, tone marks placed over
+    upper vowels will overlap with the vowel in ReportLab. 
+    This function injects ReportLab's Paragraph XML tags <font rise="x"> 
+    to manually lift the tone marks so they are visible.
+    """
+    if not isinstance(text, str):
+        return text
+        
+    upper_vowels = "\u0e31\u0e34\u0e35\u0e36\u0e37\u0e4d" # ั, ิ, ี, ึ, ื, ํ
+    tone_marks = "\u0e28\u0e29\u0e2a\u0e2b\u0e4c" # ่, ้, ๊, ๋, ์
+    
+    res = []
+    for i, char in enumerate(text):
+        if char in tone_marks and i > 0 and text[i-1] in upper_vowels:
+            # Lift the tone mark using <super> so it sits above the upper vowel
+            res.append(f'<super>{char}</super>')
+        else:
+            res.append(char)
+            
+    return "".join(res)
 
 def extract_tel(text):
     """Extract telephone number from text and convert to Arabic digits."""
@@ -664,19 +687,19 @@ def generate_delivery_note_pdf(dataframe, output_pdf_path):
     
     # Get shipper info from the first row
     first_row = dataframe.iloc[0]
-    shipper_name = str(first_row.get('SHIPPER_NAME', ''))
-    shipper_addr = str(first_row.get('SHIPPER_ADDRESS', ''))
-    shipper_amphur = str(first_row.get('SHIPPER_AMPHUR', ''))
-    shipper_prov = str(first_row.get('SHIPPER_PROVINCE', ''))
+    shipper_name = apply_thai_pua(str(first_row.get('SHIPPER_NAME', '')))
+    shipper_addr = apply_thai_pua(str(first_row.get('SHIPPER_ADDRESS', '')))
+    shipper_amphur = apply_thai_pua(str(first_row.get('SHIPPER_AMPHUR', '')))
+    shipper_prov = apply_thai_pua(str(first_row.get('SHIPPER_PROVINCE', '')))
     shipper_zip = str(first_row.get('SHIPPER_ZIPCODE', ''))
     shipper_tel = str(first_row.get('SHIPPER_TEL', ''))
     
     shipper_full_address = f"{shipper_addr} {shipper_amphur} {shipper_prov} {shipper_zip}".strip()
-    shipper_text = f"<b>ผู้ส่ง:</b> {shipper_name}<br/><b>ที่อยู่:</b> {shipper_full_address}<br/><b>โทร:</b> {shipper_tel}"
+    shipper_text = f"<b>{apply_thai_pua('ผู้ส่ง:')}</b> {shipper_name}<br/><b>{apply_thai_pua('ที่อยู่:')}</b> {shipper_full_address}<br/><b>{apply_thai_pua('โทร:')}</b> {shipper_tel}"
     
     p_shipper = Paragraph(shipper_text, style_normal)
-    p_title = Paragraph('ใบนำส่ง', style_bold_center)
-    p_license = Paragraph('ใบอนุญาตเลขที่............................................<br/>ปณ./ปจ. ............................................', style_right)
+    p_title = Paragraph(apply_thai_pua('ใบนำส่ง'), style_bold_center)
+    p_license = Paragraph(apply_thai_pua('ใบอนุญาตเลขที่............................................<br/>ปณ./ปจ. ............................................'), style_right)
     
     # Shipper and License row (2 columns)
     header_data = [[p_shipper, p_license]]
@@ -701,22 +724,22 @@ def generate_delivery_note_pdf(dataframe, output_pdf_path):
     
     # Row 3: Column Headers
     main_table_data.append([
-        Paragraph('ลำดับ', style_table_header),
-        Paragraph('หมายเลข', style_table_header),
-        Paragraph('ผู้รับ', style_table_header),
-        Paragraph('ที่อยู่', style_table_header),
-        Paragraph('น้ำหนัก', style_table_header),
-        Paragraph('ค่าบริการ', style_table_header)
+        Paragraph(apply_thai_pua('ลำดับ'), style_table_header),
+        Paragraph(apply_thai_pua('หมายเลข'), style_table_header),
+        Paragraph(apply_thai_pua('ผู้รับ'), style_table_header),
+        Paragraph(apply_thai_pua('ที่อยู่'), style_table_header),
+        Paragraph(apply_thai_pua('น้ำหนัก'), style_table_header),
+        Paragraph(apply_thai_pua('ค่าบริการ'), style_table_header)
     ])
     
     for idx, row in dataframe.iterrows():
         no = str(row.get('NO', idx + 1))
         barcode = str(row.get('BARCODE_NO', ''))
-        receiver = str(row.get('RECEIVER', ''))
+        receiver = apply_thai_pua(str(row.get('RECEIVER', '')))
         
-        r_addr = str(row.get('RECEIVER_ADDRESS', ''))
-        r_amphur = str(row.get('RECEIVER_AMPHUR', ''))
-        r_prov = str(row.get('RECEIVER_PROVINCE', ''))
+        r_addr = apply_thai_pua(str(row.get('RECEIVER_ADDRESS', '')))
+        r_amphur = apply_thai_pua(str(row.get('RECEIVER_AMPHUR', '')))
+        r_prov = apply_thai_pua(str(row.get('RECEIVER_PROVINCE', '')))
         r_zip = str(row.get('RECEIVER_ZIPCODE', ''))
         
         # Use <br/> to break line before Amphur
@@ -765,8 +788,8 @@ def generate_delivery_note_pdf(dataframe, output_pdf_path):
     elements.append(Spacer(1, 1*cm))
     
     # Footer
-    footer_text_left = '<br/><br/>ลงชื่อผู้ส่ง ..............................................................<br/>( .............................................................. )<br/>วันที่.............................................'
-    footer_text_right = '<br/><br/>ลงชื่อผู้รับ ..............................................................<br/>( .............................................................. )<br/>วันที่.............................................'
+    footer_text_left = apply_thai_pua('<br/><br/>ลงชื่อผู้ส่ง ..............................................................<br/>( .............................................................. )<br/>วันที่.............................................')
+    footer_text_right = apply_thai_pua('<br/><br/>ลงชื่อผู้รับ ..............................................................<br/>( .............................................................. )<br/>วันที่.............................................')
     
     p_footer_l = Paragraph(footer_text_left, style_footer_center)
     p_footer_r = Paragraph(footer_text_right, style_footer_center)
@@ -787,7 +810,7 @@ def generate_delivery_note_pdf(dataframe, output_pdf_path):
             canvas.setFont('Tahoma', 9)
         else:
             canvas.setFont('Helvetica', 9)
-        canvas.drawRightString(19.5*cm, 28.5*cm, f"หน้า {doc.page}")
+        canvas.drawRightString(19.5*cm, 28.5*cm, apply_thai_pua(f"หน้า {doc.page}"))
         canvas.restoreState()
         
     doc.build(elements, onFirstPage=draw_page_number, onLaterPages=draw_page_number)
