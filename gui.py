@@ -172,7 +172,7 @@ class DPostConverterGUI(ctk.CTk):
         self.divider.place(relheight=1.0, x=100)
         
         self.columns = [
-            ("View", "มือ", 50),
+            ("View", "ดู", 50),
             ("No", "ลำดับ", 50),
             ("Ref", "เลขที่อ้างอิง", 120),
             ("Receiver", "ผู้รับ", 180),
@@ -184,11 +184,11 @@ class DPostConverterGUI(ctk.CTk):
         self.tree["show"] = "tree headings"
         
         # Configure tree column (#0) for Delete action
-        self.tree.heading("#0", text="เครื่อง", anchor='e')
+        self.tree.heading("#0", text="ลบ", anchor='center')
         self.tree.column("#0", width=50, minwidth=50, stretch=False, anchor='center')
         
         for col_id, col_name, col_width in self.columns:
-            h_anchor = 'w' if col_id == "View" else 'center'
+            h_anchor = 'center'
             self.tree.heading(col_id, text=col_name, anchor=h_anchor, command=lambda _col=col_id: self.sort_treeview(_col, False))
             stretch = False if col_id == "View" else True
             col_anchor = 'center' if col_id == "View" else ('w' if col_id in ["Receiver", "Address"] else 'center')
