@@ -58,7 +58,9 @@ class DPostConverterGUI(ctk.CTk):
         
         # 1. Draw X at x=25 (centered around 25, offset 17)
         offset_x = 17
-        for i in range(8):
+        for i in range(4, 12):
+            img.put(x_color, (offset_x + i, i))
+            img.put(x_color, (offset_x + 15 - i, i))
             img.put(x_color, (offset_x + i + 1, i))
             img.put(x_color, (offset_x + i, i + 1))
             img.put(x_color, (offset_x + 15 - i - 1, i))
