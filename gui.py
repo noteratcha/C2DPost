@@ -4,7 +4,6 @@ import glob
 import threading
 from datetime import datetime
 import pandas as pd
-import windnd
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import customtkinter as ctk
@@ -52,9 +51,6 @@ class DPostConverterGUI(ctk.CTk):
         self.gray_x_img = self.create_cross_image("#94a3b8")
         self.red_x_img = self.create_cross_image("#ef4444")
         self.tooltip_window = None
-
-        # Initialize drag and drop after the window is fully mapped to prevent WinProc subclassing crash
-        self.after(100, lambda: windnd.hook_dropfiles(self, self.handle_dropped_files))
 
     def create_cross_image(self, color):
         img = tk.PhotoImage(width=16, height=16)
@@ -506,36 +502,6 @@ class DPostConverterGUI(ctk.CTk):
                 self.selected_files.extend(new_files)
                 self.lbl_status.configure(text=f"เลือกไฟล์ทั้งหมด {len(self.selected_files)} ไฟล์")
                 self.start_conversion(new_files)
-
-    def handle_dropped_files(self, files):
-        pdf_files = []
-        for f in files:
-            if isinstance(f, bytes):
-                try:
-                    path = f.decode('utf-8')
-                except UnicodeDecodeError:
-                    try:
-                        path = f.decode('ansi')
-                    except Exception:
-                        path = f.decode('utf-8', errors='ignore')
-            else:
-                path = f
-            if path.lower().endswith('.pdf') and os.path.exists(path):
-                pdf_files.append(path)
-                
-        if not pdf_files:
-            return
-            
-        # Check for duplicates
-        new_files = [f for f in pdf_files if f not in self.selected_files]
-        if len(new_files) < len(pdf_files) and self.selected_files:
-            import tkinter.messagebox as messagebox
-            messagebox.showinfo("ข้อมูลซ้ำ", f"พบไฟล์ที่เลือกไปแล้ว {len(pdf_files) - len(new_files)} ไฟล์\nระบบจะเพิ่มเฉพาะไฟล์ใหม่")
-            
-        if new_files:
-            self.selected_files.extend(new_files)
-            self.lbl_status.configure(text=f"เลือกไฟล์ทั้งหมด {len(self.selected_files)} ไฟล์")
-            self.start_conversion(new_files)
 
     def start_conversion(self, files_to_process):
         self.btn_select_files.configure(state='disabled')
