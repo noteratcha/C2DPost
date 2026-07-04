@@ -222,7 +222,7 @@ class DPostConverterGUI(ctk.CTk):
         self.tree.tag_configure('evenrow', background="#f8fafc")
 
     def set_step(self, step):
-        inactive_color = "transparent"
+        inactive_color = "#0f5128" # Matches parent steps_frame color to prevent 'transparent' rendering artifacts
         active_color = "#86efac"
         
         inactive_text = "#a7f3d0"
