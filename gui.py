@@ -105,6 +105,12 @@ class DPostConverterGUI(ctk.CTk):
         header.pack_propagate(False)
         ctk.CTkLabel(header, text="สำนักงานที่ดิน", font=("Segoe UI", 18, "bold"), text_color="#ffffff").pack(side='left', padx=30)
         
+        btn_info = ctk.CTkButton(header, text=" ℹ️ เอกสารที่รองรับ ", fg_color="#0f5128", hover_color="#0b3d1e",
+                                 text_color="#ffffff", font=("Segoe UI", 11, "bold"),
+                                 width=130, height=30, corner_radius=15,
+                                 command=self.show_supported_docs)
+        btn_info.pack(side='right', padx=30)
+        
         # Main Container
         container = ctk.CTkFrame(self, fg_color="transparent")
         container.pack(fill='both', expand=True, padx=20, pady=15)
@@ -631,6 +637,13 @@ class DPostConverterGUI(ctk.CTk):
         self.btn_clear.configure(state='normal')
         if self.dataframe is not None and not self.dataframe.empty:
             self.btn_export.configure(state='normal')
+
+    def show_supported_docs(self):
+        messagebox.showinfo(
+            "เอกสารที่รองรับ",
+            "ระบบปัจจุบันรองรับการแปลงไฟล์ประเภท:\n\n"
+            "• เอกสาร ท.ด. 38 (ใบนำส่งหนังสือแสดงสิทธิในที่ดิน DPost)"
+        )
 
     def export_excel(self):
         if self.dataframe is None or self.dataframe.empty:
