@@ -76,20 +76,20 @@ class DPostConverterGUI(ctk.CTk):
         steps_frame = ctk.CTkFrame(header, fg_color="#0f5128", corner_radius=16)
         steps_frame.pack(side='right', padx=30, pady=10)
         
-        self.lbl_step1 = ctk.CTkButton(steps_frame, text="1. เลือกไฟล์ PDF", font=("Segoe UI", 11, "bold"), corner_radius=12, fg_color="#86efac", text_color="#14532d", hover=False, height=24, width=100)
-        self.lbl_step1.pack(side='left', padx=4, pady=4)
+        self.lbl_step1 = ctk.CTkLabel(steps_frame, text="1. เลือกไฟล์ PDF", font=("Segoe UI", 11, "bold"), text_color="#86efac")
+        self.lbl_step1.pack(side='left', padx=10, pady=6)
         
         self.arrow1 = ctk.CTkLabel(steps_frame, text="›", font=("Segoe UI", 14, "bold"), text_color="#a7f3d0")
-        self.arrow1.pack(side='left', padx=8)
+        self.arrow1.pack(side='left')
         
-        self.lbl_step2 = ctk.CTkButton(steps_frame, text="2. พรีวิวข้อมูล", font=("Segoe UI", 11), corner_radius=12, fg_color="#0f5128", text_color="#a7f3d0", hover=False, height=24, width=100)
-        self.lbl_step2.pack(side='left', padx=4, pady=4)
+        self.lbl_step2 = ctk.CTkLabel(steps_frame, text="2. พรีวิวข้อมูล", font=("Segoe UI", 11), text_color="#a7f3d0")
+        self.lbl_step2.pack(side='left', padx=10, pady=6)
         
         self.arrow2 = ctk.CTkLabel(steps_frame, text="›", font=("Segoe UI", 14, "bold"), text_color="#a7f3d0")
-        self.arrow2.pack(side='left', padx=8)
+        self.arrow2.pack(side='left')
         
-        self.lbl_step3 = ctk.CTkButton(steps_frame, text="3. บันทึกไฟล์ Excel", font=("Segoe UI", 11), corner_radius=12, fg_color="#0f5128", text_color="#a7f3d0", hover=False, height=24, width=100)
-        self.lbl_step3.pack(side='left', padx=4, pady=4)
+        self.lbl_step3 = ctk.CTkLabel(steps_frame, text="3. บันทึกไฟล์ Excel", font=("Segoe UI", 11), text_color="#a7f3d0")
+        self.lbl_step3.pack(side='left', padx=10, pady=6)
         
         # Main Container
         container = ctk.CTkFrame(self, fg_color="transparent")
@@ -222,24 +222,18 @@ class DPostConverterGUI(ctk.CTk):
         self.tree.tag_configure('evenrow', background="#f8fafc")
 
     def set_step(self, step):
-        inactive_color = "#0f5128" # Matches parent steps_frame color to prevent 'transparent' rendering artifacts
-        active_color = "#86efac"
-        
         inactive_text = "#a7f3d0"
-        active_text = "#14532d"
+        active_text = "#ffffff"
         
         self.lbl_step1.configure(
-            fg_color=active_color if step == 1 else inactive_color, 
             text_color=active_text if step == 1 else inactive_text,
             font=("Segoe UI", 11, "bold" if step == 1 else "normal")
         )
         self.lbl_step2.configure(
-            fg_color=active_color if step == 2 else inactive_color, 
             text_color=active_text if step == 2 else inactive_text,
             font=("Segoe UI", 11, "bold" if step == 2 else "normal")
         )
         self.lbl_step3.configure(
-            fg_color=active_color if step == 3 else inactive_color, 
             text_color=active_text if step == 3 else inactive_text,
             font=("Segoe UI", 11, "bold" if step == 3 else "normal")
         )
