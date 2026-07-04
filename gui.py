@@ -76,20 +76,20 @@ class DPostConverterGUI(ctk.CTk):
         steps_frame = ctk.CTkFrame(header, fg_color="#0f5128", corner_radius=16)
         steps_frame.pack(side='right', padx=30, pady=10)
         
-        self.lbl_step1 = ctk.CTkLabel(steps_frame, text=" 1. เลือกไฟล์ PDF ", font=("Segoe UI", 11, "bold"), corner_radius=12, fg_color="#86efac", text_color="#14532d")
-        self.lbl_step1.pack(side='left', padx=4, pady=4, ipady=2)
+        self.lbl_step1 = ctk.CTkButton(steps_frame, text="1. เลือกไฟล์ PDF", font=("Segoe UI", 11, "bold"), corner_radius=12, fg_color="#86efac", text_color="#14532d", hover=False, height=24, width=100)
+        self.lbl_step1.pack(side='left', padx=4, pady=4)
         
         self.arrow1 = ctk.CTkLabel(steps_frame, text="›", font=("Segoe UI", 14, "bold"), text_color="#a7f3d0")
         self.arrow1.pack(side='left', padx=8)
         
-        self.lbl_step2 = ctk.CTkLabel(steps_frame, text=" 2. พรีวิวข้อมูล ", font=("Segoe UI", 11), corner_radius=12, fg_color="#0f5128", text_color="#a7f3d0")
-        self.lbl_step2.pack(side='left', padx=4, pady=4, ipady=2)
+        self.lbl_step2 = ctk.CTkButton(steps_frame, text="2. พรีวิวข้อมูล", font=("Segoe UI", 11), corner_radius=12, fg_color="#0f5128", text_color="#a7f3d0", hover=False, height=24, width=100)
+        self.lbl_step2.pack(side='left', padx=4, pady=4)
         
         self.arrow2 = ctk.CTkLabel(steps_frame, text="›", font=("Segoe UI", 14, "bold"), text_color="#a7f3d0")
         self.arrow2.pack(side='left', padx=8)
         
-        self.lbl_step3 = ctk.CTkLabel(steps_frame, text=" 3. บันทึกไฟล์ Excel ", font=("Segoe UI", 11), corner_radius=12, fg_color="#0f5128", text_color="#a7f3d0")
-        self.lbl_step3.pack(side='left', padx=4, pady=4, ipady=2)
+        self.lbl_step3 = ctk.CTkButton(steps_frame, text="3. บันทึกไฟล์ Excel", font=("Segoe UI", 11), corner_radius=12, fg_color="#0f5128", text_color="#a7f3d0", hover=False, height=24, width=100)
+        self.lbl_step3.pack(side='left', padx=4, pady=4)
         
         # Main Container
         container = ctk.CTkFrame(self, fg_color="transparent")
