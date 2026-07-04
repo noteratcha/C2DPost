@@ -105,9 +105,9 @@ class DPostConverterGUI(ctk.CTk):
         header.pack_propagate(False)
         ctk.CTkLabel(header, text="สำนักงานที่ดิน", font=("Segoe UI", 18, "bold"), text_color="#ffffff").pack(side='left', padx=30)
         
-        btn_info = ctk.CTkButton(header, text=" ℹ️ เอกสารที่รองรับ ", fg_color="#0f5128", hover_color="#0b3d1e",
-                                 text_color="#ffffff", font=("Segoe UI", 11, "bold"),
-                                 width=130, height=30, corner_radius=15,
+        btn_info = ctk.CTkButton(header, text=" ℹ️ ", fg_color="#0f5128", hover_color="#0b3d1e",
+                                 text_color="#ffffff", font=("Segoe UI", 12, "bold"),
+                                 width=32, height=32, corner_radius=16,
                                  command=self.show_supported_docs)
         btn_info.pack(side='right', padx=30)
         
