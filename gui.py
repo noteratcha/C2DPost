@@ -211,6 +211,22 @@ class DPostConverterGUI(ctk.CTk):
             
         style.configure('Treeview', background=bg, foreground=fg, rowheight=35, 
                         fieldbackground=bg, borderwidth=0, font=('Segoe UI', 10))
+        style.map('Treeview', background=[('selected', selected_bg)], foreground=[('selected', '#1e293b')])
+        
+        style.configure('Treeview.Heading', background=headings_bg, foreground="#0f172a", 
+                        font=('Segoe UI', 10, 'bold'), borderwidth=0, relief="flat", padding=(5, 8))
+        style.map('Treeview.Heading', background=[('active', '#cbd5e1')])
+        
+        # Hide the tree indicator (disclosure arrow) in column #0
+        style.layout('Treeview.Item', [
+            ('Treeitem.padding', {'side': 'left', 'sticky': 'ns', 'children': [
+                ('Treeitem.image', {'side': 'left', 'sticky': ''}),
+                ('Treeitem.focus', {'side': 'left', 'sticky': 'ns', 'children': [
+                    ('Treeitem.text', {'side': 'left', 'sticky': ''})
+                ]})
+            ]})
+        ])
+
         self.tree.tag_configure('oddrow', background="#ffffff")
         self.tree.tag_configure('evenrow', background="#f8fafc")
         self.tree.tag_configure('hover', foreground="#15803d")
