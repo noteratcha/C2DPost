@@ -424,8 +424,11 @@ class DPostConverterGUI(ctk.CTk):
         if filepath:
             try:
                 export_df = self.dataframe.copy()
-                if 'source_file' in export_df.columns:
-                    export_df = export_df.drop('source_file', axis=1)
+                
+                # Drop metadata columns before export
+                cols_to_drop = [c for c in ['SOURCE_FILE', 'source_file'] if c in export_df.columns]
+                if cols_to_drop:
+                    export_df = export_df.drop(columns=cols_to_drop)
                     
                 export_df.to_excel(filepath, index=False, engine='openpyxl')
                 messagebox.showinfo("สำเร็จ", f"บันทึกไฟล์เรียบร้อยแล้วที่:\n{filepath}")

@@ -351,7 +351,8 @@ def process_pdf(pdf_path):
                 record = {
                     **final_shipper_info,
                     **receiver_info,
-                    'REF NO': ref_no
+                    'REF NO': ref_no,
+                    'SOURCE_FILE': pdf_path
                 }
                 records.append(record)
                 
@@ -366,7 +367,7 @@ def records_to_dataframe(all_records):
         'RECEIVER_PROVINCE', 'RECEIVER_ZIPCODE', 'RECEIVER_TEL', 'RECEIVER_EMAIL',
         'WEIGHT', 'PRICE', 'INSURE', 'INSURE_PRICE', 'COD_DETAIL_NAME', 'COD_DETAIL_SIZE',
         'COD_DETAIL_VOLUME', 'COD_DETAIL_QTY', 'COD_DETAIL_COLOR', 'COD_DETAIL_QTY_AMOUNT',
-        'PROVE_OF_PAYMENT', 'IS_CONSENT'
+        'PROVE_OF_PAYMENT', 'IS_CONSENT', 'SOURCE_FILE'
     ]
     
     rows = []
@@ -412,6 +413,7 @@ def records_to_dataframe(all_records):
         row_data['COD_DETAIL_QTY_AMOUNT'] = ""
         row_data['PROVE_OF_PAYMENT'] = ""
         row_data['IS_CONSENT'] = ""
+        row_data['SOURCE_FILE'] = rec.get('SOURCE_FILE', '')
         rows.append(row_data)
         
     return pd.DataFrame(rows, columns=columns)
