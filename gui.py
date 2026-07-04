@@ -642,7 +642,7 @@ class DPostConverterGUI(ctk.CTk):
         messagebox.showinfo(
             "เอกสารที่รองรับ",
             "ระบบปัจจุบันรองรับการแปลงไฟล์ประเภท:\n\n"
-            "• เอกสาร ท.ด. 38 (ใบนำส่งหนังสือแสดงสิทธิในที่ดิน DPost)"
+            "• เอกสาร ท.ด. 38"
         )
 
     def export_excel(self):
