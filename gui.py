@@ -342,6 +342,8 @@ class DPostConverterGUI(ctk.CTk):
     def show_tooltip(self, text, x, y):
         if self.tooltip_window:
             self.tooltip_window.geometry(f"+{x}+{y}")
+            if hasattr(self, 'tooltip_label') and self.tooltip_label:
+                self.tooltip_label.configure(text=text)
             return
             
         self.tooltip_window = tk.Toplevel(self)
@@ -349,16 +351,17 @@ class DPostConverterGUI(ctk.CTk):
         self.tooltip_window.geometry(f"+{x}+{y}")
         
         # Style the tooltip
-        label = tk.Label(self.tooltip_window, text=text, justify='left',
+        self.tooltip_label = tk.Label(self.tooltip_window, text=text, justify='left',
                          background="#334155", foreground="#ffffff",
                          font=("Segoe UI", 9),
                          relief='flat', borderwidth=0, padx=6, pady=4)
-        label.pack(ipadx=1)
+        self.tooltip_label.pack(ipadx=1)
 
     def hide_tooltip(self):
         if self.tooltip_window:
             self.tooltip_window.destroy()
             self.tooltip_window = None
+            self.tooltip_label = None
 
     def delete_selected(self, event=None):
         import tkinter.messagebox as messagebox
