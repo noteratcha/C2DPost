@@ -163,12 +163,12 @@ class DPostConverterGUI(ctk.CTk):
         
         vsb.pack(side='right', fill='y')
         self.tree.pack(side='left', fill='both', expand=True)
-        self.tree.bind("<Double-1>", self.open_pdf)
         self.tree.bind("<ButtonRelease-1>", self.on_tree_click)
         self.tree.bind("<Motion>", self.on_tree_motion)
         self.tree.bind("<Leave>", self.on_tree_leave)
         
         self.columns = [
+            ("View", "ดู", 40),
             ("No", "ลำดับ", 50),
             ("Ref", "เลขที่อ้างอิง", 120),
             ("Receiver", "ผู้รับ", 180),
@@ -242,6 +242,7 @@ class DPostConverterGUI(ctk.CTk):
                 addr = ' '.join(addr.split())
                 tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
                 self.tree.insert("", "end", iid=str(idx), image=self.gray_x_img, values=(
+                    "🔍",
                     idx + 1,
                     row.get('INV_NO', ''),
                     row.get('RECEIVER', ''),
@@ -277,11 +278,14 @@ class DPostConverterGUI(ctk.CTk):
         region = self.tree.identify_region(event.x, event.y)
         if region in ["cell", "tree"]:
             column = self.tree.identify_column(event.x)
-            if column == "#0":  # Column #0 is the tree column
-                item = self.tree.identify_row(event.y)
-                if item:
+            item = self.tree.identify_row(event.y)
+            if item:
+                if column == "#0":  # Column #0 is the tree column (Delete)
                     self.tree.selection_set(item)
                     self.delete_selected()
+                elif column == "#1":  # Column #1 is the View column
+                    self.tree.selection_set(item)
+                    self.open_pdf()
 
     def on_tree_motion(self, event):
         region = self.tree.identify_region(event.x, event.y)
@@ -290,28 +294,39 @@ class DPostConverterGUI(ctk.CTk):
         
         current_hovered = getattr(self, '_hovered_item', None)
         
-        if region in ["cell", "tree"] and column == "#0" and item:
-            self.tree.configure(cursor="hand2")
-            if current_hovered != item:
+        if region in ["cell", "tree"] and item:
+            if column == "#0":
+                self.tree.configure(cursor="hand2")
+                if current_hovered != item:
+                    if current_hovered:
+                        try:
+                            self.tree.item(current_hovered, image=self.gray_x_img)
+                        except:
+                            pass
+                    self.tree.item(item, image=self.red_x_img)
+                    self._hovered_item = item
+                self.show_tooltip("ลบรายการ", event.x_root + 15, event.y_root + 15)
+                return
+            elif column == "#1":
+                self.tree.configure(cursor="hand2")
                 if current_hovered:
                     try:
                         self.tree.item(current_hovered, image=self.gray_x_img)
                     except:
                         pass
-                self.tree.item(item, image=self.red_x_img)
-                self._hovered_item = item
-            
-            # Show tooltip "ลบรายการ"
-            self.show_tooltip("ลบรายการ", event.x_root + 15, event.y_root + 15)
-        else:
-            self.tree.configure(cursor="")
-            if current_hovered:
-                try:
-                    self.tree.item(current_hovered, image=self.gray_x_img)
-                except:
-                    pass
-                self._hovered_item = None
-            self.hide_tooltip()
+                    self._hovered_item = None
+                self.show_tooltip("ดูไฟล์ PDF", event.x_root + 15, event.y_root + 15)
+                return
+                
+        # If not hovering target columns, reset
+        self.tree.configure(cursor="")
+        if current_hovered:
+            try:
+                self.tree.item(current_hovered, image=self.gray_x_img)
+            except:
+                pass
+            self._hovered_item = None
+        self.hide_tooltip()
 
     def on_tree_leave(self, event):
         self.tree.configure(cursor="")
