@@ -521,31 +521,47 @@ class DPostConverterGUI(ctk.CTk):
 
     def run_conversion_task(self, files_to_process):
         new_records = []
+        failed_files = []
         total = len(files_to_process)
         
         for i, filepath in enumerate(files_to_process):
+            filename = os.path.basename(filepath)
             try:
                 records = process_pdf(filepath)
                 if records:
                     for r in records:
-                        r['source_file'] = os.path.basename(filepath)
+                        r['source_file'] = filepath
                     new_records.extend(records)
+                else:
+                    failed_files.append(filename)
             except Exception as e:
-                print(f"Error processing {os.path.basename(filepath)}: {e}")
+                print(f"Error processing {filename}: {e}")
+                failed_files.append(filename)
                 
             self.after(10, self.update_progress, (i + 1) / total, i + 1, total)
             
-        self.after(10, self.conversion_completed, new_records)
+        self.after(10, self.conversion_completed, new_records, failed_files)
 
     def update_progress(self, val, current, total):
         self.progress.set(val)
         percent = int(val * 100)
         self.lbl_status.configure(text=f"กำลังแปลงไฟล์... {current}/{total} ({percent}%)")
 
-    def conversion_completed(self, new_records):
+    def conversion_completed(self, new_records, failed_files):
         self.progress.pack_forget()
         self.lbl_status.pack(pady=(8, 8)) # restore padding
         
+        # Remove failed files from self.selected_files
+        if failed_files:
+            self.selected_files = [f for f in self.selected_files if os.path.basename(f) not in failed_files]
+            
+            # Show warning to user about incorrect files
+            failed_list = "\n".join(f"- {name}" for name in failed_files)
+            messagebox.showwarning(
+                "พบไฟล์ไม่ถูกต้อง",
+                f"ไฟล์ต่อไปนี้ไม่ใช่รูปแบบใบนำส่ง DPost หรือไม่มีข้อมูลผู้รับ:\n\n{failed_list}\n\n(ระบบได้นำออกจากการเลือกแล้ว)"
+            )
+            
         if new_records:
             new_df = records_to_dataframe(new_records)
             
@@ -564,9 +580,15 @@ class DPostConverterGUI(ctk.CTk):
             self.filter_treeview()
             self.set_step(3)
         else:
+            self.lbl_stat_files.configure(text=f"📄 ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
+            self.lbl_stat_records.configure(text=f"👥 รายการผู้รับ: {len(self.dataframe) if self.dataframe is not None else 0} รายการ")
+            
             if not self.parsed_records:
                 self.lbl_status.configure(text="ไม่พบข้อมูลในไฟล์ที่เลือก")
                 self.set_step(1)
+            else:
+                self.lbl_status.configure(text=f"ประมวลผลเสร็จสิ้น รวมทั้งหมด {len(self.dataframe)} รายการ")
+                self.set_step(3)
         
         self.btn_select_files.configure(state='normal')
         self.btn_clear.configure(state='normal')
