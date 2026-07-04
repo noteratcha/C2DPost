@@ -181,7 +181,7 @@ class DPostConverterGUI(ctk.CTk):
         
         # Configure tree column (#0) for Delete action
         self.tree.heading("#0", text="ลบ", anchor='center')
-        self.tree.column("#0", width=55, minwidth=50, stretch=False, anchor='center')
+        self.tree.column("#0", width=50, minwidth=50, stretch=False, anchor='center')
         
         for col_id, col_name, col_width in self.columns:
             self.tree.heading(col_id, text=col_name, command=lambda _col=col_id: self.sort_treeview(_col, False))
@@ -282,12 +282,12 @@ class DPostConverterGUI(ctk.CTk):
             item = self.tree.identify_row(event.y)
             if item:
                 if column == "#0":  # Column #0 is the tree column (Delete)
-                    # Center is 27.5, allow click only within 17 to 37 (20px width)
-                    if 17 <= event.x <= 37:
+                    # Center is 25 (0 to 50), allow click only within 15 to 35 (20px width)
+                    if 15 <= event.x <= 35:
                         self.tree.selection_set(item)
                         self.delete_selected()
                 elif column == "#1":  # Column #1 is the View column
-                    # Center is 75 (55 + 20), allow click only within 65 to 85 (20px width)
+                    # Center is 75 (50 + 25), allow click only within 65 to 85 (20px width)
                     if 65 <= event.x <= 85:
                         self.tree.selection_set(item)
                         self.open_pdf()
@@ -300,7 +300,7 @@ class DPostConverterGUI(ctk.CTk):
         current_hovered = getattr(self, '_hovered_item', None)
         
         if region in ["cell", "tree"] and item:
-            if column == "#0" and (17 <= event.x <= 37):
+            if column == "#0" and (15 <= event.x <= 35):
                 self.tree.configure(cursor="hand2")
                 if current_hovered != item:
                     if current_hovered:
