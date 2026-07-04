@@ -121,6 +121,7 @@ class DPostConverterGUI(ctk.CTk):
         btn_frame.pack(fill='x', padx=20, pady=(5, 12))
         
         self.btn_select_files = ctk.CTkButton(btn_frame, text=" ➕ เพิ่มไฟล์ PDF ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
+                                                text_color="#ffffff",
                                                 font=("Segoe UI", 12, "bold"), command=self.select_files, width=150, height=36)
         self.btn_select_files.pack(side='left', padx=(0, 10))
         
@@ -136,6 +137,7 @@ class DPostConverterGUI(ctk.CTk):
         self.lbl_status.pack(fill='both', expand=True, pady=(8, 8))
         
         self.btn_export = ctk.CTkButton(btn_frame, text=" 📥 บันทึกไฟล์ Excel ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
+                                        text_color="#ffffff",
                                         font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=170, height=36)
         self.btn_export.pack(side='right')
         
