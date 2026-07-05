@@ -156,7 +156,7 @@ class DPostConverterGUI(ctk.CTk):
         card_files = ctk.CTkFrame(container, fg_color=COLOR_CARD, corner_radius=10, border_width=1, border_color=COLOR_BORDER)
         card_files.grid(row=0, column=0, sticky='nsew', pady=(0, 15))
         
-        ctk.CTkLabel(card_files, text="📄 ขั้นตอนที่ 1: เลือกเอกสาร PDF", font=("Segoe UI", 14, "bold"), text_color=COLOR_PRIMARY).pack(anchor='w', padx=20, pady=(15, 5))
+        ctk.CTkLabel(card_files, text="📄 เลือกเอกสาร PDF", font=("Segoe UI", 14, "bold"), text_color=COLOR_PRIMARY).pack(anchor='w', padx=20, pady=(15, 5))
         
         btn_frame = ctk.CTkFrame(card_files, fg_color="transparent")
         btn_frame.pack(fill='x', padx=20, pady=(5, 12))
@@ -165,6 +165,10 @@ class DPostConverterGUI(ctk.CTk):
                                                 text_color="#ffffff",
                                                 font=("Segoe UI", 12, "bold"), command=self.select_files, width=150, height=36)
         self.btn_select_files.pack(side='left', padx=(0, 10))
+        
+        # Add tooltip for select files button
+        self.btn_select_files.bind("<Enter>", lambda event: self.show_tooltip("เลือกไฟล์ PDF ที่ออกจากระบบ", event.x_root + 10, event.y_root + 10))
+        self.btn_select_files.bind("<Leave>", lambda event: self.hide_tooltip())
         
         # Removed btn_clear from here to place it in preview_header
         
@@ -182,6 +186,10 @@ class DPostConverterGUI(ctk.CTk):
                                         font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=170, height=36)
         self.btn_export.pack(side='right')
         
+        # Add tooltip for save button
+        self.btn_export.bind("<Enter>", lambda event: self.show_tooltip("เมื่อบันทึกไฟล์ จะไม่สามารถแก้ไขข้อมูลได้\nไฟล์ที่ได้รับ\n1.ไฟล์ excel (สำหรับ DPost)\n2.ไฟล์ PDF (เอกสารพร้อมบาร์โค้ด)\n3.ไฟล์ PDF (ใบนำส่ง)", event.x_root + 10, event.y_root + 10))
+        self.btn_export.bind("<Leave>", lambda event: self.hide_tooltip())
+        
         self.progress = ctk.CTkProgressBar(self.status_box, progress_color=COLOR_PRIMARY, height=8, corner_radius=4)
         
         # Card 2: Preview Table
@@ -191,7 +199,7 @@ class DPostConverterGUI(ctk.CTk):
         preview_header = ctk.CTkFrame(card_preview, fg_color="transparent")
         preview_header.pack(fill='x', padx=20, pady=(15, 10))
         
-        ctk.CTkLabel(preview_header, text="📊 ขั้นตอนที่ 2: ตารางแสดงข้อมูล", font=("Segoe UI", 14, "bold"), text_color=COLOR_PRIMARY).pack(side='left')
+        ctk.CTkLabel(preview_header, text="📊 ตารางแสดงข้อมูล", font=("Segoe UI", 14, "bold"), text_color=COLOR_PRIMARY).pack(side='left')
         
         # Right aligned stats and search
         self.search_entry = ctk.CTkEntry(preview_header, placeholder_text=" 🔍 ค้นหาผู้รับ / เลขอ้างอิง... ", width=250, height=30, font=("Segoe UI", 11), corner_radius=15)
@@ -201,6 +209,8 @@ class DPostConverterGUI(ctk.CTk):
                                        hover_color="#fecaca", text_color="#ef4444",
                                        font=("Segoe UI", 11, "bold"), command=self.clear_selection, width=95, height=30, corner_radius=15)
         self.btn_clear.pack(side='right', padx=(10, 0))
+        self.btn_clear.bind("<Enter>", lambda event: self.show_tooltip("ลบข้อมูลทั้งหมด", event.x_root + 10, event.y_root + 10))
+        self.btn_clear.bind("<Leave>", lambda event: self.hide_tooltip())
         
         self.lbl_stat_records = ctk.CTkLabel(preview_header, text="👥 รายการผู้รับ: 0 รายการ", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
         self.lbl_stat_records.pack(side='right', padx=10)
@@ -209,6 +219,8 @@ class DPostConverterGUI(ctk.CTk):
         self.lbl_stat_files.pack(side='right', padx=10)
         self.lbl_stat_files.bind("<Button-1>", self.show_selected_files_popup)
         self.lbl_stat_files.configure(cursor="hand2")
+        self.lbl_stat_files.bind("<Enter>", lambda event: self.show_tooltip("คลิกเพื่อดูไฟล์ PDF ที่เลือก", event.x_root + 10, event.y_root + 10))
+        self.lbl_stat_files.bind("<Leave>", lambda event: self.hide_tooltip())
         
         self.search_entry.bind("<KeyRelease>", self.filter_treeview)
         self.search_entry.bind("<Escape>", self.clear_search)
@@ -463,13 +475,16 @@ class DPostConverterGUI(ctk.CTk):
             
         self.tooltip_window = tk.Toplevel(self)
         self.tooltip_window.wm_overrideredirect(True)
+        self.tooltip_window.wm_attributes("-transparentcolor", "black")
+        self.tooltip_window.configure(bg="black")
         
-        # Style the tooltip
-        self.tooltip_label = tk.Label(self.tooltip_window, text=text, justify='left',
-                         background="#334155", foreground="#ffffff",
-                         font=("Segoe UI", 9),
-                         relief='flat', borderwidth=0, padx=6, pady=4)
-        self.tooltip_label.pack(ipadx=1)
+        # Style the tooltip with a modern rounded frame
+        self.tooltip_frame = ctk.CTkFrame(self.tooltip_window, fg_color="#ea580c", corner_radius=8)
+        self.tooltip_frame.pack(fill="both", expand=True, padx=1, pady=1)
+        
+        self.tooltip_label = ctk.CTkLabel(self.tooltip_frame, text=text, justify='left',
+                                          text_color="#ffffff", font=("Segoe UI", 12, "bold"))
+        self.tooltip_label.pack(padx=16, pady=10)
         self.position_tooltip(x, y)
 
     def position_tooltip(self, x, y):

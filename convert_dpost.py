@@ -25,7 +25,7 @@ try:
 except Exception:
     FONT_REGISTERED = False
 
-__version__ = "2026.0704.2324"
+__version__ = "2026.0705.1424"
 
 # Thailand Post API Credentials
 API_KEY = "V9JN25IFH5hdZYc1k8NNRVgnLYXyQLzc"
@@ -124,20 +124,21 @@ def clean_thai_digits(text):
 def apply_thai_pua(text):
     """
     Since Tahoma does not have MacThai PUA glyphs, tone marks placed over
-    upper vowels will overlap with the vowel in ReportLab. 
-    This function injects ReportLab's Paragraph XML tags <font rise="x"> 
+    upper vowels or tall consonants will overlap in ReportLab. 
+    This function injects ReportLab's Paragraph XML tags <super> 
     to manually lift the tone marks so they are visible.
     """
     if not isinstance(text, str):
         return text
         
     upper_vowels = "\u0e31\u0e34\u0e35\u0e36\u0e37\u0e4d" # ั, ิ, ี, ึ, ื, ํ
-    tone_marks = "\u0e28\u0e29\u0e2a\u0e2b\u0e4c" # ่, ้, ๊, ๋, ์
+    tall_consonants = "\u0e1b\u0e1d\u0e1f\u0e2c" # ป, ฝ, ฟ, ฬ
+    tone_marks = "\u0e48\u0e49\u0e4a\u0e4b\u0e4c" # ่, ้, ๊, ๋, ์
     
     res = []
     for i, char in enumerate(text):
-        if char in tone_marks and i > 0 and text[i-1] in upper_vowels:
-            # Lift the tone mark using <super> so it sits above the upper vowel
+        if char in tone_marks and i > 0 and (text[i-1] in upper_vowels or text[i-1] in tall_consonants):
+            # Lift the tone mark using <super> so it sits above the upper vowel/tall consonant
             res.append(f'<super>{char}</super>')
         else:
             res.append(char)
@@ -597,7 +598,7 @@ def generate_combined_pdf(dataframe, output_pdf_path):
                 
                 # Coordinates for bottom left red box, 5% from left edge
                 base_x = width * 0.05
-                base_y = 20
+                base_y = 40
                 
                 # Draw Barcode (Code128) - size increased by 10% again
                 barcode128 = code128.Code128(str(barcode_no), barHeight=20.625, barWidth=0.825)
@@ -626,10 +627,10 @@ def generate_combined_pdf(dataframe, output_pdf_path):
                 renderPDF.draw(d, c, center_x - 37.5, base_y + 65)
                 
                 # --- Draw E-AR Box above QR Code ---
-                box_w = 110
-                box_h = 45
+                box_w = 120
+                box_h = 55
                 box_x = center_x - (box_w / 2.0)
-                box_y = base_y + 145  # 145 is above the QR code (65 + 75 = 140)
+                box_y = base_y + 155  # 155 is above the QR code to add more space
                 
                 c.setStrokeColorRGB(0, 0, 0) # Black border
                 c.setLineWidth(1)
@@ -638,17 +639,17 @@ def generate_combined_pdf(dataframe, output_pdf_path):
                 
                 c.setFillColorRGB(0, 0, 0)
                 if FONT_REGISTERED:
-                    c.setFont('Tahoma-Bold', 18)
+                    c.setFont('Tahoma-Bold', 24)
                 else:
-                    c.setFont('Helvetica-Bold', 18)
-                c.drawCentredString(center_x, box_y + 26, "e-AR")
+                    c.setFont('Helvetica-Bold', 24)
+                c.drawCentredString(center_x, box_y + 31, "e-AR")
                 
                 if FONT_REGISTERED:
                     c.setFont('Tahoma', 9)
                 else:
                     c.setFont('Helvetica', 9)
-                c.drawCentredString(center_x, box_y + 14, "ลงทะเบียนตอบรับ")
-                c.drawCentredString(center_x, box_y + 4, "ทางอิเล็กทรอนิกส์")
+                c.drawCentredString(center_x, box_y + 19, "ลงทะเบียนตอบรับ")
+                c.drawCentredString(center_x, box_y + 9, "ทางอิเล็กทรอนิกส์")
                 # -----------------------------------
                 
                 c.save()
