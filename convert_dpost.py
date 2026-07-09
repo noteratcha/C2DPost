@@ -13,7 +13,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import A4, portrait, landscape
 from reportlab.lib import colors
-from reportlab.lib.units import cm
+from reportlab.lib.units import cm, mm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -334,8 +334,21 @@ def parse_shipper_label(text):
             break
             
     if shipper_idx != -1:
-        shipper_name = lines[shipper_idx]
+        raw_name = lines[shipper_idx]
         
+        # Clean up shipper_name by dropping preceding garbage (like "Kที่ นพ...")
+        if "ฝ่ายรังวัด สำนักงานที่ดิน" in raw_name:
+            shipper_name = raw_name[raw_name.find("ฝ่ายรังวัด สำนักงานที่ดิน"):]
+        elif "สำนักงานที่ดิน" in raw_name:
+            shipper_name = raw_name[raw_name.find("สำนักงานที่ดิน"):]
+        else:
+            shipper_name = raw_name
+            
+        # Attempt to extract ref_no if it was merged into the shipper_name line
+        ref_match = re.search(r'ที่\s*([ก-ฮa-zA-Z]+[๐-๙0-9\.\/]+)', raw_name)
+        if ref_match:
+            ref_no = clean_thai_digits(ref_match.group(1).strip())
+            
         # Collect subsequent lines as address parts until we hit reference number or other block
         addr_parts = []
         for j in range(shipper_idx + 1, len(lines)):
@@ -354,11 +367,12 @@ def parse_shipper_label(text):
             addr_conv = re.sub(r'จังหวัด|จ\.', 'จ.', addr_conv)
             shipper_address = addr_conv
                 
-        # Look for reference number "ที่ ..."
-        for line in lines[shipper_idx:]:
-            if line.startswith("ที่"):
-                ref_no = clean_thai_digits(line.replace("ที่", "").strip())
-                break
+        # Look for reference number "ที่ ..." if not already found in raw_name
+        if not ref_no:
+            for line in lines[shipper_idx:]:
+                if line.startswith("ที่"):
+                    ref_no = clean_thai_digits(line.replace("ที่", "").strip())
+                    break
                 
     return {
         'SHIPPER NAME': shipper_name,
@@ -401,6 +415,16 @@ def process_pdf(pdf_path):
                 extracted = extracted.translate(THAI_TO_ARABIC)
                 # Clean up spaces
                 product_in_box = re.sub(r'\s+', ' ', extracted)
+            else:
+                # Fallback to extract from "เรื่อง ..." or specific document titles
+                # Use negative lookbehind (?<!รับ) to prevent matching "รับเรื่อง"
+                subject_match = re.search(r'(?<!รับ)เรื่อง\s+([^\n]+)', text)
+                if "หนังสือมอบเรื่องการระวังชี้แนวเขตและลงชื่อรับรองเขตที่ดิน" in text or "เรื่อง การระวังชี้แนวเขตและลงชื่อรับรองเขตที่ดิน" in text:
+                    product_in_box = "-"
+                elif subject_match:
+                    product_in_box = subject_match.group(1).strip()
+                elif "ออกโฉนดที่ดิน" in text:
+                    product_in_box = "ออกโฉนดที่ดิน"
             
     # 2. Post-process the shipper info based on the rules:
     # Rule 2: "ถ้าข้อมูลที่คอลัมน์ G (SHIPPER ADDRESS) ว่าง ให้ไปเอาข้อมูลวรรคสุดท้ายของ F (SHIPPER NAME) มาใส่ และลบข้อความนั้นออกจากคอลัมน์ F"
@@ -447,6 +471,10 @@ def process_pdf(pdf_path):
         # Clean up spaces
         best_shipper_address = re.sub(r'\s+', ' ', best_shipper_address).strip()
         
+        # User requested to keep only the first word (วรรคแรก) for the address to remove document text garbage
+        if best_shipper_address:
+            best_shipper_address = best_shipper_address.split()[0]
+        
     # Prepare the structured shipper dict
     final_shipper_info = {
         'SHIPPER NAME': best_shipper_name,
@@ -485,7 +513,18 @@ def process_pdf(pdf_path):
                     'REF NO': ref_no,
                     'SOURCE_FILE': pdf_path
                 }
-                records.append(record)
+                
+                # Check for duplicates (e.g., letter body vs envelope). 
+                # Overwrite the existing record because the later page (envelope) usually has a cleaner, complete address.
+                is_duplicate = False
+                for r_idx, r in enumerate(records):
+                    if r.get('REF NO') == record.get('REF NO') and r.get('RECEIVER') == record.get('RECEIVER'):
+                        records[r_idx] = record
+                        is_duplicate = True
+                        break
+                        
+                if not is_duplicate:
+                    records.append(record)
                 
     return records
 
@@ -523,14 +562,17 @@ def records_to_dataframe(all_records):
         else:
             row_data['BARCODE_NO'] = ""
             
-        row_data['PRODUCT_IN_BOX'] = rec.get('PRODUCT IN BOX', '')
+        product_in_box = rec.get('PRODUCT IN BOX', '').strip()
+        row_data['PRODUCT_IN_BOX'] = product_in_box if product_in_box else "-"
         
         row_data['SHIPPER_NAME'] = rec.get('SHIPPER NAME', '')
-        row_data['SHIPPER_ADDRESS'] = rec.get('SHIPPER ADDRESS', '')
+        shipper_address = rec.get('SHIPPER ADDRESS', '').strip()
+        row_data['SHIPPER_ADDRESS'] = shipper_address if shipper_address else "-"
         row_data['SHIPPER_AMPHUR'] = rec.get('SHIPPER AMPHUR', '')
         row_data['SHIPPER_PROVINCE'] = rec.get('SHIPPER PROVINCE', '')
         row_data['SHIPPER_ZIPCODE'] = rec.get('SHIPPER ZIPCODE', '')
-        row_data['SHIPPER_TEL'] = rec.get('SHIPPER TEL', '')
+        shipper_tel = rec.get('SHIPPER TEL', '').strip()
+        row_data['SHIPPER_TEL'] = shipper_tel if shipper_tel else "-"
         row_data['SHIPPER_EMAIL'] = ""
         
         row_data['RECEIVER'] = rec.get('RECEIVER', '')
@@ -558,7 +600,7 @@ def records_to_dataframe(all_records):
         
     return pd.DataFrame(rows, columns=columns)
 
-def generate_combined_pdf(dataframe, output_pdf_path):
+def generate_combined_pdf(dataframe, output_pdf_path, envelope_only=False):
     writer = PdfWriter()
     
     processed_files = set()
@@ -586,6 +628,7 @@ def generate_combined_pdf(dataframe, output_pdf_path):
             is_envelope = "ชำระค่าฝากส่งเป็นรายเดือน" in clean_text or "ใบอนุญาตเลขที่" in clean_text
             is_last_page = (i == len(reader.pages) - 1)
             
+            has_overlay = False
             if (is_envelope or is_last_page) and current_record_idx < len(file_records):
                 barcode_no = file_records[current_record_idx].get('BARCODE_NO', '')
                 
@@ -593,24 +636,53 @@ def generate_combined_pdf(dataframe, output_pdf_path):
                     width = float(page.mediabox.width)
                     height = float(page.mediabox.height)
                 
+                # Find X and Y coordinate of "เรียน"
+                y_coord_rian = None
+                x_coord_rian = None
+                def visitor_body(text_content, cm, tm, font_dict, font_size):
+                    nonlocal y_coord_rian, x_coord_rian
+                    # Find the first occurrence of "เรียน"
+                    if "เรียน" in text_content and y_coord_rian is None:
+                        x_coord_rian = tm[4]
+                        y_coord_rian = tm[5]
+                page.extract_text(visitor_text=visitor_body)
+                
                 packet = io.BytesIO()
                 c = canvas.Canvas(packet, pagesize=(width, height))
                 
-                # Coordinates for bottom left red box, 5% from left edge
-                base_x = width * 0.05
-                base_y = 40
+                # Scale factor to make overlay smaller
+                scale = 0.8
+
+                if y_coord_rian is not None and x_coord_rian is not None:
+                    # Position dynamically relative to "เรียน"
+                    # Align the bottom edge of the e-AR box with the baseline of the "เรียน" text
+                    # The e-AR box bottom is at base_y + (155 * scale)
+                    # So base_y = y_coord_rian - (155 * scale)
+                    base_y = y_coord_rian - (155 * scale)
+                    
+                    # Position horizontally to the left of "เรียน" making it closer (5pt gap)
+                    # Right edge of barcode is base_x + (164.7 * scale)
+                    base_x = x_coord_rian - 5 - (164.7 * scale)
+                    
+                    # Prevent going off-screen to the left or bottom
+                    base_x = max(10, base_x)
+                    base_y = max(10, base_y)
+                else:
+                    # Fallback to old default if "เรียน" is not found
+                    base_x = width * 0.05
+                    base_y = 40
                 
-                # Draw Barcode (Code128) - size increased by 10% again
-                barcode128 = code128.Code128(str(barcode_no), barHeight=20.625, barWidth=0.825)
-                barcode128.drawOn(c, base_x, base_y + 40)
+                # Draw Barcode (Code128)
+                barcode128 = code128.Code128(str(barcode_no), barHeight=20.625 * scale, barWidth=0.825 * scale)
+                barcode128.drawOn(c, base_x, base_y + (40 * scale))
                 
                 # Get actual width for perfect centering
-                barcode_width = getattr(barcode128, 'width', 164.7)
+                barcode_width = getattr(barcode128, 'width', 164.7 * scale)
                 center_x = base_x + (barcode_width / 2.0)
                 
                 # Draw text centered under barcode
-                c.setFont("Helvetica-Bold", 14)
-                c.drawCentredString(center_x, base_y + 20, str(barcode_no))
+                c.setFont("Helvetica-Bold", 14 * scale)
+                c.drawCentredString(center_x, base_y + (20 * scale), str(barcode_no))
                 
                 # Draw QR Code centered above barcode
                 qr_code = qr.QrCodeWidget(str(barcode_no))
@@ -618,19 +690,20 @@ def generate_combined_pdf(dataframe, output_pdf_path):
                 qr_width = bounds[2] - bounds[0]
                 qr_height = bounds[3] - bounds[1]
                 
-                # Scale QR code to 75x75 pts (50% larger)
-                scale_w = 75.0 / qr_width
-                scale_h = 75.0 / qr_height
-                d = Drawing(75, 75, transform=[scale_w, 0, 0, scale_h, 0, 0])
+                # Scale QR code
+                qr_size = 75.0 * scale
+                scale_w = qr_size / qr_width
+                scale_h = qr_size / qr_height
+                d = Drawing(qr_size, qr_size, transform=[scale_w, 0, 0, scale_h, 0, 0])
                 d.add(qr_code)
-                # Centered: center_x - 37.5, Y: above barcode (base_y + 65)
-                renderPDF.draw(d, c, center_x - 37.5, base_y + 65)
+                # Centered, Y: above barcode
+                renderPDF.draw(d, c, center_x - (qr_size / 2.0), base_y + (65 * scale))
                 
                 # --- Draw E-AR Box above QR Code ---
-                box_w = 120
-                box_h = 55
+                box_w = 120 * scale
+                box_h = 55 * scale
                 box_x = center_x - (box_w / 2.0)
-                box_y = base_y + 155  # 155 is above the QR code to add more space
+                box_y = base_y + (155 * scale)
                 
                 c.setStrokeColorRGB(0, 0, 0) # Black border
                 c.setLineWidth(1)
@@ -639,17 +712,17 @@ def generate_combined_pdf(dataframe, output_pdf_path):
                 
                 c.setFillColorRGB(0, 0, 0)
                 if FONT_REGISTERED:
-                    c.setFont('Tahoma-Bold', 24)
+                    c.setFont('Tahoma-Bold', 24 * scale)
                 else:
-                    c.setFont('Helvetica-Bold', 24)
-                c.drawCentredString(center_x, box_y + 31, "e-AR")
+                    c.setFont('Helvetica-Bold', 24 * scale)
+                c.drawCentredString(center_x, box_y + (31 * scale), "e-AR")
                 
                 if FONT_REGISTERED:
-                    c.setFont('Tahoma', 9)
+                    c.setFont('Tahoma', max(7.5, 9 * scale))
                 else:
-                    c.setFont('Helvetica', 9)
-                c.drawCentredString(center_x, box_y + 19, "ลงทะเบียนตอบรับ")
-                c.drawCentredString(center_x, box_y + 9, "ทางอิเล็กทรอนิกส์")
+                    c.setFont('Helvetica', max(7.5, 9 * scale))
+                c.drawCentredString(center_x, box_y + (19 * scale), "ลงทะเบียนตอบรับ")
+                c.drawCentredString(center_x, box_y + (9 * scale), "ทางอิเล็กทรอนิกส์")
                 # -----------------------------------
                 
                 c.save()
@@ -658,9 +731,20 @@ def generate_combined_pdf(dataframe, output_pdf_path):
                 overlay_pdf = PdfReader(packet)
                 page.merge_page(overlay_pdf.pages[0])
                 
+                has_overlay = True
                 current_record_idx += 1
                 
-            writer.add_page(page)
+            if envelope_only:
+                if has_overlay:
+                    if y_coord_rian is not None:
+                        # Adjust top crop to just above the Garuda logo (around 140 pts above "เรียน")
+                        page.mediabox.top = y_coord_rian + 145
+                        page.mediabox.bottom = max(0, y_coord_rian - 145)
+                        page.cropbox.top = page.mediabox.top
+                        page.cropbox.bottom = page.mediabox.bottom
+                    writer.add_page(page)
+            else:
+                writer.add_page(page)
         
     with open(output_pdf_path, "wb") as f_out:
         writer.write(f_out)
@@ -815,6 +899,139 @@ def generate_delivery_note_pdf(dataframe, output_pdf_path):
         canvas.restoreState()
         
     doc.build(elements, onFirstPage=draw_page_number, onLaterPages=draw_page_number)
+
+def generate_custom_envelopes_pdf(dataframe, output_pdf_path):
+    if dataframe.empty:
+        return
+        
+    writer = PdfWriter()
+    
+    # DL Size is 220x110 mm
+    
+    for idx, row in dataframe.iterrows():
+        packet = io.BytesIO()
+        c = canvas.Canvas(packet, pagesize=(220*mm, 110*mm))
+        
+        font_normal = 'Tahoma' if FONT_REGISTERED else 'Helvetica'
+        font_bold = 'Tahoma-Bold' if FONT_REGISTERED else 'Helvetica-Bold'
+        
+        c.setFont(font_normal, 10)
+        base_y_sender = 90 * mm
+        
+        # --- Top Left (Sender) ---
+        shipper_name = str(row.get('SHIPPER_NAME', '')).replace('None', '')
+        shipper_address = str(row.get('SHIPPER_ADDRESS', '')).replace('None', '')
+        shipper_amphur = str(row.get('SHIPPER_AMPHUR', '')).replace('None', '')
+        shipper_province = str(row.get('SHIPPER_PROVINCE', '')).replace('None', '')
+        shipper_zipcode = str(row.get('SHIPPER_ZIPCODE', '')).replace('None', '')
+        ref_no = str(row.get('INV_NO', '')).replace('None', '')
+        
+        c.drawString(30 * mm, base_y_sender, shipper_name)
+        c.drawString(30 * mm, base_y_sender - 5*mm, f"อำเภอ{shipper_amphur} {shipper_province} {shipper_zipcode}".strip())
+        if ref_no:
+            c.drawString(30 * mm, base_y_sender - 10*mm, f"ที่ {ref_no}")
+        
+        # --- Top Right ---
+        c.drawString(160 * mm, base_y_sender, "ชำระค่าฝากส่งเป็นรายเดือน")
+        c.drawString(160 * mm, base_y_sender - 5*mm, "ใบอนุญาตเลขที่")
+        if shipper_amphur:
+            c.drawString(160 * mm, base_y_sender - 10*mm, f"ไปรษณีย์{shipper_amphur}")
+        
+        # --- Center (Receiver) ---
+        c.setFont(font_normal, 12)
+        base_x_receiver = 80 * mm
+        base_y_receiver = 60 * mm
+        
+        receiver = str(row.get('RECEIVER', '')).replace('None', '')
+        receiver_address = str(row.get('RECEIVER_ADDRESS', '')).replace('None', '')
+        receiver_amphur = str(row.get('RECEIVER_AMPHUR', '')).replace('None', '')
+        receiver_province = str(row.get('RECEIVER_PROVINCE', '')).replace('None', '')
+        receiver_zipcode = str(row.get('RECEIVER_ZIPCODE', '')).replace('None', '')
+        
+        c.drawString(base_x_receiver - 10*mm, base_y_receiver, "เรียน")
+        c.drawString(base_x_receiver, base_y_receiver, receiver)
+        
+        # Draw address lines
+        current_y = base_y_receiver - 6*mm
+        if receiver_address:
+            # Try to split long address into 2 lines if possible
+            if len(receiver_address) > 40:
+                parts = receiver_address.split(' ต.')
+                if len(parts) > 1:
+                    c.drawString(base_x_receiver, current_y, parts[0])
+                    current_y -= 6*mm
+                    c.drawString(base_x_receiver, current_y, f"ต.{parts[1]}")
+                else:
+                    c.drawString(base_x_receiver, current_y, receiver_address)
+            else:
+                c.drawString(base_x_receiver, current_y, receiver_address)
+            current_y -= 6*mm
+            
+        if receiver_amphur:
+            c.drawString(base_x_receiver, current_y, f"อำเภอ/เขต {receiver_amphur}")
+            current_y -= 6*mm
+            
+        if receiver_province:
+            c.drawString(base_x_receiver, current_y, f"จังหวัด {receiver_province}")
+            current_y -= 6*mm
+            
+        if receiver_zipcode:
+            c.drawString(base_x_receiver, current_y, receiver_zipcode)
+            
+        # --- Overlay (Barcode & QR) ---
+        barcode_no = str(row.get('BARCODE_NO', '')).replace('None', '').strip()
+        if barcode_no:
+            scale = 0.8
+            # Position it to the left of "เรียน"
+            x_coord_rian = base_x_receiver - 10*mm
+            y_coord_rian = base_y_receiver
+            
+            base_y = y_coord_rian - (155 * scale)
+            base_x = x_coord_rian - 5 - (164.7 * scale)
+            
+            barcode128 = code128.Code128(barcode_no, barHeight=20.625 * scale, barWidth=0.825 * scale)
+            barcode128.drawOn(c, base_x, base_y + (40 * scale))
+            
+            barcode_width = getattr(barcode128, 'width', 164.7 * scale)
+            center_x = base_x + (barcode_width / 2.0)
+            
+            c.setFont(font_bold, 14 * scale)
+            c.drawCentredString(center_x, base_y + (20 * scale), barcode_no)
+            
+            qr_code = qr.QrCodeWidget(barcode_no)
+            bounds = qr_code.getBounds()
+            qr_size = 75.0 * scale
+            scale_w = qr_size / (bounds[2] - bounds[0])
+            scale_h = qr_size / (bounds[3] - bounds[1])
+            d = Drawing(qr_size, qr_size, transform=[scale_w, 0, 0, scale_h, 0, 0])
+            d.add(qr_code)
+            renderPDF.draw(d, c, center_x - (qr_size / 2.0), base_y + (65 * scale))
+            
+            box_w = 120 * scale
+            box_h = 55 * scale
+            box_x = center_x - (box_w / 2.0)
+            box_y = base_y + (155 * scale)
+            
+            c.setStrokeColorRGB(0, 0, 0)
+            c.setLineWidth(1)
+            c.setFillColorRGB(1, 1, 1)
+            c.rect(box_x, box_y, box_w, box_h, fill=1, stroke=1)
+            
+            c.setFillColorRGB(0, 0, 0)
+            c.setFont(font_bold, 24 * scale)
+            c.drawCentredString(center_x, box_y + (31 * scale), "e-AR")
+            c.setFont(font_normal, max(7.5, 9 * scale))
+            c.drawCentredString(center_x, box_y + (19 * scale), "ลงทะเบียนตอบรับ")
+            c.drawCentredString(center_x, box_y + (9 * scale), "ทางอิเล็กทรอนิกส์")
+            
+        c.save()
+        packet.seek(0)
+        
+        new_page_pdf = PdfReader(packet)
+        writer.add_page(new_page_pdf.pages[0])
+        
+    with open(output_pdf_path, "wb") as f_out:
+        writer.write(f_out)
 
 def main():
     print(f"โปรแกรมแปลงข้อมูล DPost (Version {__version__})")

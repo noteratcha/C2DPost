@@ -181,9 +181,14 @@ class DPostConverterGUI(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(self.status_box, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 12), text_color=COLOR_PRIMARY)
         self.lbl_status.pack(fill='both', expand=True, pady=(8, 8))
         
+        self.btn_envelope = ctk.CTkButton(btn_frame, text=" ✉️ สร้างจ่าหน้าซอง ", fg_color="#3b82f6", hover_color="#2563eb",
+                                        text_color="#ffffff",
+                                        font=("Segoe UI", 12, "bold"), command=self.export_envelope, state='disabled', width=140, height=36)
+        self.btn_envelope.pack(side='right', padx=(10, 0))
+        
         self.btn_export = ctk.CTkButton(btn_frame, text=" 📥 บันทึกไฟล์ ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
                                         text_color="#ffffff",
-                                        font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=170, height=36)
+                                        font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=140, height=36)
         self.btn_export.pack(side='right')
         
         # Add tooltip for save button
@@ -646,6 +651,7 @@ class DPostConverterGUI(ctk.CTk):
         self.btn_select_files.configure(state='disabled')
         self.btn_clear.configure(state='disabled')
         self.btn_export.configure(state='disabled')
+        self.btn_envelope.configure(state='disabled')
         
         self.progress.pack(fill='x', side='bottom', padx=2, pady=(0, 2))
         self.progress.set(0)
@@ -753,12 +759,18 @@ class DPostConverterGUI(ctk.CTk):
         self.btn_clear.configure(state='normal')
         if self.dataframe is not None and not self.dataframe.empty:
             self.btn_export.configure(state='normal')
+            self.btn_envelope.configure(state='normal')
+        else:
+            self.btn_export.configure(state='disabled')
+            self.btn_envelope.configure(state='disabled')
 
     def show_supported_docs(self):
         messagebox.showinfo(
             "เอกสารที่รองรับ",
             "ระบบปัจจุบันรองรับการแปลงไฟล์ประเภท:\n\n"
-            "• ท.ด. 38"
+            "• ท.ด. 38\n"
+            "• ท.ด. 81\n"
+            "• ออกโฉนดที่ดิน"
         )
 
     def export_excel(self):
@@ -989,6 +1001,43 @@ class DPostConverterGUI(ctk.CTk):
         
         btn_cancel = ctk.CTkButton(btn_frame, text="ไว้ทีหลัง", command=dialog.destroy, fg_color="#ef4444", hover_color="#b91c1c", font=("Segoe UI", 12, "bold"))
         btn_cancel.pack(side="left", padx=10)
+
+    def export_envelope(self):
+        if self.dataframe is None or self.dataframe.empty:
+            return
+            
+        # Check if barcodes exist
+        missing_barcodes = self.dataframe['BARCODE_NO'].isna() | (self.dataframe['BARCODE_NO'] == "")
+        if missing_barcodes.any():
+            messagebox.showwarning("ยังไม่ได้ออกเลขบาร์โค้ด", "กรุณากด 'บันทึกไฟล์' เพื่อออกเลขลงทะเบียนสำหรับทุกรายการก่อนครับ\n(หรือกรอกเลขบาร์โค้ดให้ครบในตาราง)")
+            return
+            
+        import datetime
+        now = datetime.datetime.now()
+        default_filename = f"Envelopes_{now.strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        output_pdf = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            initialfile=default_filename,
+            filetypes=[("PDF files", "*.pdf")],
+            title="บันทึกไฟล์จ่าหน้าซอง"
+        )
+        
+        if not output_pdf:
+            return
+            
+        try:
+            self.lbl_status.configure(text="กำลังสร้างไฟล์จ่าหน้าซอง...")
+            self.update_idletasks()
+            
+            from convert_dpost import generate_combined_pdf
+            generate_combined_pdf(self.dataframe, output_pdf, envelope_only=True)
+            
+            messagebox.showinfo("สำเร็จ", f"สร้างไฟล์จ่าหน้าซองสำเร็จ\n{output_pdf}")
+            self.lbl_status.configure(text="สร้างไฟล์จ่าหน้าซองสำเร็จ")
+        except Exception as e:
+            messagebox.showerror("ข้อผิดพลาด", f"ไม่สามารถสร้างไฟล์จ่าหน้าซองได้:\n{str(e)}")
+            self.lbl_status.configure(text="เกิดข้อผิดพลาดในการสร้างไฟล์จ่าหน้าซอง")
 
 def main():
     app = DPostConverterGUI()

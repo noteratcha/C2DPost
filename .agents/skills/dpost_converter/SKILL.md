@@ -24,7 +24,7 @@ Use this skill when modifying the PDF mailing label conversion logic or updating
 ## GUI Specifications
 - **Header Banner**:
   - Displays "สำนักงานที่ดิน" on the left.
-  - Displays a clean circular `ℹ` info button (24x24px, corner_radius=12) on the right side. When clicked, it lists supported documents (currently "• ท.ด. 38").
+  - Displays a clean circular `ℹ` info button (24x24px, corner_radius=12) on the right side. When clicked, it lists supported documents (currently "• ท.ด. 38", "• ท.ด. 81", "• ออกโฉนดที่ดิน").
 - **Unified Tools Column (#0)**:
   - Width: 100px, stretch=False, anchor='center'.
   - Contains both the **Delete ✕** and **View ⌕** icons drawn dynamically as a single 100x16 `tk.PhotoImage`.
