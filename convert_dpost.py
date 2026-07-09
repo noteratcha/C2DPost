@@ -25,7 +25,7 @@ try:
 except Exception:
     FONT_REGISTERED = False
 
-__version__ = "2026.0705.1424"
+__version__ = "2026.0709.2322"
 
 # Thailand Post API Credentials
 API_KEY = "V9JN25IFH5hdZYc1k8NNRVgnLYXyQLzc"
@@ -737,9 +737,25 @@ def generate_combined_pdf(dataframe, output_pdf_path, envelope_only=False):
             if envelope_only:
                 if has_overlay:
                     if y_coord_rian is not None:
-                        # Adjust top crop to just above the Garuda logo (around 140 pts above "เรียน")
-                        page.mediabox.top = y_coord_rian + 145
-                        page.mediabox.bottom = max(0, y_coord_rian - 145)
+                        dl_width = 220 * mm
+                        dl_height = 110 * mm
+                        orig_width = float(page.mediabox.width)
+                        
+                        # Center horizontally
+                        left = (orig_width - dl_width) / 2.0
+                        right = left + dl_width
+                        
+                        # Center vertically around 'เรียน'
+                        top = y_coord_rian + (dl_height / 2.0)
+                        bottom = top - dl_height
+                        
+                        page.mediabox.left = left
+                        page.mediabox.right = right
+                        page.mediabox.top = top
+                        page.mediabox.bottom = max(0, bottom)
+                        
+                        page.cropbox.left = page.mediabox.left
+                        page.cropbox.right = page.mediabox.right
                         page.cropbox.top = page.mediabox.top
                         page.cropbox.bottom = page.mediabox.bottom
                     writer.add_page(page)

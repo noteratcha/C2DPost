@@ -185,6 +185,8 @@ class DPostConverterGUI(ctk.CTk):
                                         text_color="#ffffff",
                                         font=("Segoe UI", 12, "bold"), command=self.export_envelope, state='disabled', width=140, height=36)
         self.btn_envelope.pack(side='right', padx=(10, 0))
+        self.btn_envelope.bind("<Enter>", lambda event: self.show_tooltip("ต้องบันทึกไฟล์ก่อน จึงจะสร้างจ่าหน้าซองได้", event.x_root + 10, event.y_root + 10))
+        self.btn_envelope.bind("<Leave>", lambda event: self.hide_tooltip())
         
         self.btn_export = ctk.CTkButton(btn_frame, text=" 📥 บันทึกไฟล์ ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
                                         text_color="#ffffff",
@@ -210,8 +212,8 @@ class DPostConverterGUI(ctk.CTk):
         self.search_entry = ctk.CTkEntry(preview_header, placeholder_text=" 🔍 ค้นหาผู้รับ / เลขอ้างอิง... ", width=250, height=30, font=("Segoe UI", 11), corner_radius=15)
         self.search_entry.pack(side='right', padx=(15, 0))
         
-        self.btn_clear = ctk.CTkButton(preview_header, text=" 🧹 ล้างข้อมูล ", fg_color="#f1f5f9", 
-                                       hover_color="#fecaca", text_color="#ef4444",
+        self.btn_clear = ctk.CTkButton(preview_header, text=" 🧹 ล้างข้อมูล ", fg_color="#ef4444", 
+                                       hover_color="#b91c1c", text_color="#ffffff",
                                        font=("Segoe UI", 11, "bold"), command=self.clear_selection, width=95, height=30, corner_radius=15)
         self.btn_clear.pack(side='right', padx=(10, 0))
         self.btn_clear.bind("<Enter>", lambda event: self.show_tooltip("ลบข้อมูลทั้งหมด", event.x_root + 10, event.y_root + 10))
@@ -236,7 +238,7 @@ class DPostConverterGUI(ctk.CTk):
         
         vsb = ctk.CTkScrollbar(table_frame, orientation="vertical")
         
-        self.tree = ttk.Treeview(table_frame, selectmode="extended", yscrollcommand=vsb.set)
+        self.tree = ttk.Treeview(table_frame, selectmode="none", yscrollcommand=vsb.set)
         vsb.configure(command=self.tree.yview)
         
         vsb.pack(side='right', fill='y')
@@ -250,12 +252,13 @@ class DPostConverterGUI(ctk.CTk):
         self.divider.place(relheight=1.0, x=100)
         
         self.columns = [
-            ("No", "ลำดับ", 50),
-            ("Barcode", "หมายเลข", 130),
-            ("Ref", "เลขที่อ้างอิง", 120),
-            ("Receiver", "ผู้รับ", 180),
-            ("Address", "ที่อยู่ผู้รับ (ที่อยู่ / อำเภอ / จังหวัด)", 420),
-            ("Zip", "รหัสไปรษณีย์", 100)
+            ("Select", "[ ✓ ]", 45, 45),
+            ("No", "ลำดับ", 50, 40),
+            ("Barcode", "หมายเลข", 130, 100),
+            ("Ref", "เลขที่อ้างอิง", 120, 100),
+            ("Receiver", "ผู้รับ", 180, 120),
+            ("Address", "ที่อยู่ผู้รับ (ที่อยู่ / อำเภอ / จังหวัด)", 400, 150),
+            ("Zip", "รหัสไปรษณีย์", 100, 80)
         ]
         
         self.tree["columns"] = [col[0] for col in self.columns]
@@ -265,12 +268,18 @@ class DPostConverterGUI(ctk.CTk):
         self.tree.heading("#0", text="เครื่องมือ", anchor='center')
         self.tree.column("#0", width=100, minwidth=100, stretch=False, anchor='center')
         
-        for col_id, col_name, col_width in self.columns:
+        for col_id, col_name, col_width, col_minwidth in self.columns:
             h_anchor = 'center'
-            self.tree.heading(col_id, text=col_name, anchor=h_anchor, command=lambda _col=col_id: self.sort_treeview(_col, False))
-            stretch = True
+            if col_id == "Select":
+                self.tree.heading(col_id, text=col_name, anchor=h_anchor, command=self.toggle_all_checkboxes)
+            else:
+                self.tree.heading(col_id, text=col_name, anchor=h_anchor, command=lambda _col=col_id: self.sort_treeview(_col, False))
+            
+            # Make only Address stretch dynamically (responsive)
+            stretch = True if col_id == "Address" else False
+            
             col_anchor = 'w' if col_id in ["Receiver", "Address"] else 'center'
-            self.tree.column(col_id, width=col_width, minwidth=col_width, stretch=stretch, anchor=col_anchor)
+            self.tree.column(col_id, width=col_width, minwidth=col_minwidth, stretch=stretch, anchor=col_anchor)
             
 
     def style_treeview(self):
@@ -286,6 +295,9 @@ class DPostConverterGUI(ctk.CTk):
                         fieldbackground=bg, borderwidth=0, font=('Segoe UI', 10))
         style.map('Treeview', background=[('selected', selected_bg)], foreground=[('selected', '#1e293b')])
         
+        self.tree.tag_configure('selected_row', foreground='#166534', font=('Segoe UI', 10, 'bold'))
+        self.tree.tag_configure('evenrow', background='#f8fafc')
+        self.tree.tag_configure('oddrow', background='#ffffff')
         style.configure('Treeview.Heading', background=headings_bg, foreground="#0f172a", 
                         font=('Segoe UI', 10, 'bold'), borderwidth=0, relief="flat", padding=(5, 8))
         style.map('Treeview.Heading', background=[('active', '#cbd5e1')])
@@ -329,14 +341,21 @@ class DPostConverterGUI(ctk.CTk):
                 # Clean up double spaces if any component is missing
                 addr = ' '.join(addr.split())
                 tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
+                if 'SELECTED' not in self.dataframe.columns:
+                    self.dataframe['SELECTED'] = False
+                is_selected = self.dataframe.at[idx, 'SELECTED']
+                chk_text = "[ ✓ ]" if is_selected else "[   ]"
+                
+                tags = (tag, 'selected_row') if is_selected else (tag,)
                 self.tree.insert("", "end", iid=str(idx), image=self.tools_normal_img, values=(
+                    chk_text,
                     idx + 1,
                     row.get('BARCODE_NO', ''),
                     row.get('INV_NO', ''),
                     row.get('RECEIVER', ''),
                     addr,
                     row.get('RECEIVER_ZIPCODE', '')
-                ), tags=(tag,))
+                ), tags=tags)
 
     def clear_search(self, event=None):
         self.search_entry.delete(0, 'end')
@@ -362,19 +381,83 @@ class DPostConverterGUI(ctk.CTk):
             self.tree.move(k, '', index)
         self.tree.heading(col_id, command=lambda: self.sort_treeview(col_id, not reverse))
 
+    def toggle_all_checkboxes(self):
+        if self.dataframe is None or self.dataframe.empty:
+            return
+            
+        if 'SELECTED' not in self.dataframe.columns:
+            self.dataframe['SELECTED'] = False
+            
+        # Only consider rows that have a barcode
+        has_barcode = self.dataframe['BARCODE_NO'].notna() & (self.dataframe['BARCODE_NO'] != "")
+        if not has_barcode.any():
+            self.show_custom_msgbox("info", "แจ้งเตือน", "กรุณากด 'บันทึกไฟล์' เพื่อดึงหมายเลขบาร์โค้ดก่อนครับ")
+            return
+            
+        # If all valid rows are selected, deselect them. Otherwise, select all valid rows.
+        all_valid_selected = self.dataframe.loc[has_barcode, 'SELECTED'].all()
+        new_val = not all_valid_selected
+        
+        self.dataframe.loc[has_barcode, 'SELECTED'] = new_val
+        
+        chk_text = "[ ✓ ]" if new_val else "[   ]"
+        # Update the heading icon to reflect state
+        self.tree.heading("Select", text=chk_text)
+        
+        for idx in self.dataframe[has_barcode].index:
+            try:
+                self.tree.set(str(idx), "Select", chk_text)
+                # Update tags for coloring
+                current_tags = list(self.tree.item(str(idx), "tags"))
+                if "selected_row" in current_tags:
+                    current_tags.remove("selected_row")
+                if new_val:
+                    current_tags.append("selected_row")
+                self.tree.item(str(idx), tags=tuple(current_tags))
+            except Exception:
+                pass
+
     def on_tree_click(self, event):
         region = self.tree.identify_region(event.x, event.y)
         if region in ["cell", "tree"]:
             column = self.tree.identify_column(event.x)
             item = self.tree.identify_row(event.y)
             if item:
-                if column == "#0":  # Column #0 is the unified Tools column
+                if column == "#1":  # Our new Select column
+                    idx = int(item)
+                    
+                    # Check if barcode exists before allowing selection
+                    barcode = self.dataframe.at[idx, 'BARCODE_NO']
+                    if pd.isna(barcode) or str(barcode).strip() == "":
+                        self.show_custom_msgbox("info", "แจ้งเตือน", "รายการนี้ยังไม่มีหมายเลขบาร์โค้ด กรุณากด 'บันทึกไฟล์' เพื่อดึงหมายเลขก่อนครับ")
+                        return
+
+                    if 'SELECTED' not in self.dataframe.columns:
+                        self.dataframe['SELECTED'] = False
+                    current_val = self.dataframe.at[idx, 'SELECTED']
+                    new_val = not current_val
+                    self.dataframe.at[idx, 'SELECTED'] = new_val
+                    chk_text = "[ ✓ ]" if new_val else "[   ]"
+                    self.tree.set(item, "Select", chk_text)
+                    
+                    current_tags = list(self.tree.item(item, "tags"))
+                    if "selected_row" in current_tags:
+                        current_tags.remove("selected_row")
+                    if new_val:
+                        current_tags.append("selected_row")
+                    self.tree.item(item, tags=tuple(current_tags))
+                    
+                    # Update header if all valid are selected or not
+                    has_barcode = self.dataframe['BARCODE_NO'].notna() & (self.dataframe['BARCODE_NO'] != "")
+                    all_selected = self.dataframe.loc[has_barcode, 'SELECTED'].all()
+                    self.tree.heading("Select", text="[ ✓ ]" if all_selected else "[   ]")
+                    return
+                elif column == "#0":  # Column #0 is the unified Tools column
                     # Check if this row already has a barcode
                     try:
                         idx = int(item)
                         if self.dataframe is not None and not pd.isna(self.dataframe.loc[idx].get('BARCODE_NO')) and str(self.dataframe.loc[idx].get('BARCODE_NO')).strip():
-                            import tkinter.messagebox as messagebox
-                            messagebox.showinfo("ข้อมูลถูกยืนยันแล้ว", "รายการนี้ถูกออกเลขลงทะเบียนแล้ว ไม่สามารถใช้งานเครื่องมือได้ครับ")
+                            self.show_custom_msgbox("info", "ข้อมูลถูกยืนยันแล้ว", "รายการนี้ถูกออกเลขลงทะเบียนแล้ว ไม่สามารถใช้งานเครื่องมือได้ครับ")
                             return
                     except:
                         pass
@@ -442,6 +525,20 @@ class DPostConverterGUI(ctk.CTk):
                         self._hovered_item = (item, 'view')
                     self.show_tooltip("ดูไฟล์ PDF", event.x_root + 15, event.y_root + 15)
                     return
+            else:
+                # Hovering over other columns, maybe show full text tooltip if it's Address
+                if column == "#6":  # Address column
+                    vals = self.tree.item(item, 'values')
+                    if vals and len(vals) >= 6:
+                        address_text = vals[5]
+                        self.show_tooltip(address_text, event.x_root + 15, event.y_root + 15)
+                        return
+                elif column == "#5": # Receiver column
+                    vals = self.tree.item(item, 'values')
+                    if vals and len(vals) >= 5:
+                        receiver_text = vals[4]
+                        self.show_tooltip(receiver_text, event.x_root + 15, event.y_root + 15)
+                        return
                 
         # If not hovering target icons, reset cursor/images but keep row hover
         self.tree.configure(cursor="")
@@ -484,11 +581,11 @@ class DPostConverterGUI(ctk.CTk):
         self.tooltip_window.configure(bg="black")
         
         # Style the tooltip with a modern rounded frame
-        self.tooltip_frame = ctk.CTkFrame(self.tooltip_window, fg_color="#ea580c", corner_radius=8)
+        self.tooltip_frame = ctk.CTkFrame(self.tooltip_window, fg_color="#ea580c", corner_radius=8, border_width=2, border_color="#ffffff")
         self.tooltip_frame.pack(fill="both", expand=True, padx=1, pady=1)
         
         self.tooltip_label = ctk.CTkLabel(self.tooltip_frame, text=text, justify='left',
-                                          text_color="#ffffff", font=("Segoe UI", 12, "bold"))
+                                          text_color="#ffffff", font=("Segoe UI", 12, "bold"), wraplength=400)
         self.tooltip_label.pack(padx=16, pady=10)
         self.position_tooltip(x, y)
 
@@ -509,18 +606,17 @@ class DPostConverterGUI(ctk.CTk):
             self.tooltip_window = None
             self.tooltip_label = None
 
-    def delete_selected(self, event=None):
-        import tkinter.messagebox as messagebox
-        selected_items = self.tree.selection()
-        if not selected_items:
-            messagebox.showwarning("ข้อแนะนำ", "กรุณาคลิกเลือกรายการในตารางที่ต้องการลบก่อนครับ")
+    def delete_selected(self):
+        selected_iids = self.tree.selection()
+        if not selected_iids:
+            self.show_custom_msgbox("warning", "ข้อแนะนำ", "กรุณาคลิกเลือกรายการในตารางที่ต้องการลบก่อนครับ")
             return
             
-        if not messagebox.askyesno("ยืนยันการลบ", "คุณต้องการลบข้อมูลที่เลือกใช่หรือไม่?\n\n(ระบบจะนำไฟล์ PDF ต้นฉบับของข้อมูลเหล่านี้ออกจากรายการด้วย)"):
+        if not self.show_custom_msgbox("askyesno", "ยืนยันการลบ", "คุณต้องการลบข้อมูลที่เลือกใช่หรือไม่?\n\n(ระบบจะนำไฟล์ PDF ต้นฉบับของข้อมูลเหล่านี้ออกจากรายการด้วย)"):
             return
             
         try:
-            indices_to_delete = [int(iid) for iid in selected_items]
+            indices_to_delete = [int(iid) for iid in selected_iids]
             
             files_to_remove = set()
             if self.dataframe is not None and not self.dataframe.empty and 'SOURCE_FILE' in self.dataframe.columns:
@@ -553,37 +649,41 @@ class DPostConverterGUI(ctk.CTk):
                 else:
                     self.filter_treeview()
         except Exception as e:
-            messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถลบรายการได้เนื่องจาก:\n{str(e)}")
+            self.show_custom_msgbox("error", "เกิดข้อผิดพลาด", f"ไม่สามารถลบรายการได้เนื่องจาก:\n{str(e)}")
 
     def open_pdf(self, event=None):
-        import tkinter.messagebox as messagebox
-        selected_items = self.tree.selection()
-        if not selected_items:
+        selected_iids = self.tree.selection()
+        if not selected_iids:
             return
             
         try:
-            iid = selected_items[0]
-            idx = int(iid)
-            
-            if self.dataframe is None or self.dataframe.empty:
-                messagebox.showwarning("ข้อผิดพลาด", "ไม่พบข้อมูลในตาราง")
+            idx = int(selected_iids[0])
+            if self.dataframe is None or self.dataframe.empty or idx not in self.dataframe.index:
+                self.show_custom_msgbox("warning", "ข้อผิดพลาด", "ไม่พบข้อมูลในตาราง")
                 return
                 
-            if 'SOURCE_FILE' not in self.dataframe.columns:
-                messagebox.showwarning("ข้อแนะนำ", "กรุณากดปุ่ม 'ล้างข้อมูล' และเลือกไฟล์ PDF เข้ามาใหม่อีกครั้ง เพื่อให้ระบบจำไฟล์ต้นฉบับครับ")
-                return
-                
-            file_path = self.dataframe.loc[idx, 'SOURCE_FILE']
+            file_path = self.dataframe.loc[idx, 'FILE_PATH']
             if not file_path:
-                messagebox.showwarning("ข้อผิดพลาด", "ข้อมูลบรรทัดนี้ไม่มีไฟล์ต้นฉบับบันทึกไว้")
+                self.show_custom_msgbox("warning", "ข้อแนะนำ", "กรุณากดปุ่ม 'ล้างข้อมูล' และเลือกไฟล์ PDF เข้ามาใหม่อีกครั้ง เพื่อให้ระบบจำไฟล์ต้นฉบับครับ")
                 return
                 
-            if os.path.exists(file_path):
+            if str(file_path).strip() == "" or str(file_path).strip() == "nan":
+                self.show_custom_msgbox("warning", "ข้อผิดพลาด", "ข้อมูลบรรทัดนี้ไม่มีไฟล์ต้นฉบับบันทึกไว้")
+                return
+                
+            import os
+            import sys
+            if not os.path.exists(file_path):
+                self.show_custom_msgbox("error", "ไม่พบไฟล์", f"ไม่พบไฟล์ต้นฉบับในระบบ:\n{file_path}")
+                return
+                
+            if sys.platform == "win32":
                 os.startfile(file_path)
-            else:
-                messagebox.showerror("ไม่พบไฟล์", f"ไม่พบไฟล์ต้นฉบับในระบบ:\n{file_path}")
+            elif sys.platform == "darwin":
+                import subprocess
+                subprocess.call(["open", file_path])
         except Exception as e:
-            messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถเปิดไฟล์ได้เนื่องจาก:\n{str(e)}")
+            self.show_custom_msgbox("error", "เกิดข้อผิดพลาด", f"ไม่สามารถเปิดไฟล์ได้เนื่องจาก:\n{str(e)}")
 
     def show_selected_files_popup(self, event=None):
         if not self.selected_files:
@@ -610,8 +710,8 @@ class DPostConverterGUI(ctk.CTk):
             lbl.pack(fill='x', pady=2)
 
     def clear_selection(self):
-        if self.selected_files or (self.dataframe is not None and not self.dataframe.empty):
-            if not messagebox.askyesno("ยืนยันการล้างข้อมูล", "คุณต้องการล้างข้อมูลผู้รับและไฟล์ PDF ทั้งหมดที่เลือกไว้ใช่หรือไม่?"):
+        if self.dataframe is not None and not self.dataframe.empty:
+            if not self.show_custom_msgbox("askyesno", "ยืนยันการล้างข้อมูล", "คุณต้องการล้างข้อมูลผู้รับและไฟล์ PDF ทั้งหมดที่เลือกไว้ใช่หรือไม่?"):
                 return
                 
         self.selected_files = []
@@ -622,6 +722,7 @@ class DPostConverterGUI(ctk.CTk):
         self.lbl_stat_records.configure(text="👥 รายการผู้รับ: 0 รายการ")
         
         self.btn_export.configure(state='disabled')
+        self.btn_envelope.configure(state='disabled')
         self.btn_select_files.configure(text=" ➕ เพิ่มไฟล์ PDF ", state='normal')
         
         for item in self.tree.get_children():
@@ -639,8 +740,8 @@ class DPostConverterGUI(ctk.CTk):
             
             # Check for duplicates if already have files
             new_files = [f for f in files if f not in self.selected_files]
-            if len(new_files) < len(files) and self.selected_files:
-                messagebox.showinfo("ข้อมูลซ้ำ", f"พบไฟล์ที่เลือกไปแล้ว {len(files) - len(new_files)} ไฟล์\nระบบจะเพิ่มเฉพาะไฟล์ใหม่")
+            if len(new_files) < len(files):
+                self.show_custom_msgbox("info", "ข้อมูลซ้ำ", f"พบไฟล์ที่เลือกไปแล้ว {len(files) - len(new_files)} ไฟล์\nระบบจะเพิ่มเฉพาะไฟล์ใหม่")
             
             if new_files:
                 self.selected_files.extend(new_files)
@@ -664,8 +765,7 @@ class DPostConverterGUI(ctk.CTk):
 
     def run_conversion_task(self, files_to_process):
         new_records = []
-        failed_files = []
-        errors = []
+        error_files = []
         total = len(files_to_process)
         
         for i, filepath in enumerate(files_to_process):
@@ -677,10 +777,9 @@ class DPostConverterGUI(ctk.CTk):
                         r['source_file'] = filepath
                     new_records.extend(records)
                 else:
-                    failed_files.append(filename)
+                    error_files.append((filepath, "ไม่พบข้อมูล"))
             except Exception as e:
-                errors.append(f"ไฟล์ {filename}: {str(e)}")
-                failed_files.append(filename)
+                error_files.append((filepath, str(e)))
                 
             self.after(10, self.update_progress, (i + 1) / total, i + 1, total)
             
@@ -690,16 +789,16 @@ class DPostConverterGUI(ctk.CTk):
             try:
                 new_df = records_to_dataframe(new_records)
             except Exception as e:
-                errors.append(f"การสร้างตารางข้อมูล: {str(e)}")
+                error_files.append(("General", f"การสร้างตารางข้อมูล: {str(e)}"))
             
-        self.after(10, self.conversion_completed, new_records, failed_files, new_df, errors)
+        self.after(10, self.conversion_completed, new_records, error_files, new_df)
 
     def update_progress(self, val, current, total):
         self.progress.set(val)
         percent = int(val * 100)
         self.lbl_status.configure(text=f"กำลังแปลงไฟล์... {current}/{total} ({percent}%)")
 
-    def conversion_completed(self, new_records, failed_files, new_df=None, errors=None):
+    def conversion_completed(self, new_records, error_files, new_df=None):
         self.progress.pack_forget()
         self.lbl_status.pack(pady=(8, 8)) # restore padding
         
@@ -709,22 +808,14 @@ class DPostConverterGUI(ctk.CTk):
         except Exception:
             pass
         
-        if errors:
-            error_list = "\n".join(f"- {err}" for err in errors[:10])
-            if len(errors) > 10:
-                error_list += f"\n... และอีก {len(errors) - 10} ปัญหา"
-            messagebox.showerror("พบปัญหาในการทำงาน", f"เกิดข้อผิดพลาดดังนี้:\n\n{error_list}")
+        if error_files:
+            error_list = "\n".join([f"- {os.path.basename(f)}: {err}" for f, err in error_files])
+            self.show_custom_msgbox("error", "พบปัญหาในการทำงาน", f"เกิดข้อผิดพลาดดังนี้:\n\n{error_list}")
             
         # Remove failed files from self.selected_files
+        failed_files = [f for f, _ in error_files]
         if failed_files:
-            self.selected_files = [f for f in self.selected_files if os.path.basename(f) not in failed_files]
-            
-            # Show warning to user about incorrect files
-            failed_list = "\n".join(f"- {name}" for name in failed_files)
-            messagebox.showwarning(
-                "พบไฟล์ไม่ถูกต้อง",
-                f"ไฟล์ต่อไปนี้ไม่ใช่รูปแบบใบนำส่ง DPost หรือไม่มีข้อมูลผู้รับ:\n\n{failed_list}\n\n(ระบบได้นำออกจากการเลือกแล้ว)"
-            )
+            self.selected_files = [f for f in self.selected_files if f not in failed_files]
             
         if new_records and new_df is not None:
             # new_df = records_to_dataframe(new_records)
@@ -759,13 +850,17 @@ class DPostConverterGUI(ctk.CTk):
         self.btn_clear.configure(state='normal')
         if self.dataframe is not None and not self.dataframe.empty:
             self.btn_export.configure(state='normal')
-            self.btn_envelope.configure(state='normal')
+            if 'BARCODE_NO' in self.dataframe.columns and not (self.dataframe['BARCODE_NO'].isna() | (self.dataframe['BARCODE_NO'] == "")).any():
+                self.btn_envelope.configure(state='normal')
+            else:
+                self.btn_envelope.configure(state='disabled')
         else:
             self.btn_export.configure(state='disabled')
             self.btn_envelope.configure(state='disabled')
 
     def show_supported_docs(self):
-        messagebox.showinfo(
+        self.show_custom_msgbox(
+            "info",
             "เอกสารที่รองรับ",
             "ระบบปัจจุบันรองรับการแปลงไฟล์ประเภท:\n\n"
             "• ท.ด. 38\n"
@@ -775,7 +870,7 @@ class DPostConverterGUI(ctk.CTk):
 
     def export_excel(self):
         if self.dataframe is None or self.dataframe.empty:
-            messagebox.showwarning("ไม่มีข้อมูล", "กรุณาแปลงไฟล์ PDF ก่อนบันทึก")
+            self.show_custom_msgbox("warning", "ไม่มีข้อมูล", "กรุณาแปลงไฟล์ PDF ก่อนบันทึก")
             return
             
         default_filename = f"DPost_Export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
@@ -798,7 +893,7 @@ class DPostConverterGUI(ctk.CTk):
                 
                 barcodes = fetch_registered_barcodes(num_records)
                 if len(barcodes) < num_records:
-                    messagebox.showwarning("คำเตือน", "ดึงบาร์โค้ดได้ไม่ครบตามจำนวนข้อมูล")
+                    self.show_custom_msgbox("warning", "คำเตือน", "ดึงบาร์โค้ดได้ไม่ครบตามจำนวนข้อมูล")
                 
                 # นับแยกประเภทบาร์โค้ด (EMS=E,J, R=R,B, eCo=O)
                 ems_count = sum(1 for b in barcodes if str(b).upper().startswith(('E', 'J')))
@@ -826,20 +921,29 @@ class DPostConverterGUI(ctk.CTk):
                 for i in range(num_records):
                     if i < len(barcodes):
                         self.dataframe.at[i, 'BARCODE_NO'] = barcodes[i]
+                        self.dataframe.at[i, 'SELECTED'] = False
                     else:
                         self.dataframe.at[i, 'BARCODE_NO'] = ""
+                        self.dataframe.at[i, 'SELECTED'] = False
+                        
+                # Update header to unchecked since default is now False
+                if len(barcodes) > 0 and len(barcodes) == num_records:
+                    self.tree.heading("Select", text="[   ]")
                         
                 # Update the UI table to show the fetched barcodes
                 self.filter_treeview()
                 self.update()
+                
+                # Enable envelope generation after barcodes are fetched
+                self.btn_envelope.configure(state='normal')
                 
                 # Disable Add PDF button so user must clear data to start over
                 self.btn_select_files.configure(state='disabled')
 
                 export_df = self.dataframe.copy()
                 
-                # Drop metadata columns before export
-                cols_to_drop = [c for c in ['SOURCE_FILE', 'source_file'] if c in export_df.columns]
+                # Drop metadata and internal state columns before export
+                cols_to_drop = [c for c in ['SOURCE_FILE', 'source_file', 'SELECTED'] if c in export_df.columns]
                 if cols_to_drop:
                     export_df = export_df.drop(columns=cols_to_drop)
                     
@@ -857,7 +961,7 @@ class DPostConverterGUI(ctk.CTk):
                     self.show_success_dialog(filepath, pdf_filepath, delivery_note_filepath)
                     self.lbl_status.configure(text="บันทึกไฟล์ Excel, PDF รวม และ ใบนำส่ง สำเร็จ")
                 except Exception as pdf_e:
-                    messagebox.showerror("ข้อผิดพลาด PDF", f"สร้าง Excel สำเร็จ แต่ไม่สามารถสร้าง PDF ได้:\n{str(pdf_e)}")
+                    self.show_custom_msgbox("error", "ข้อผิดพลาด PDF", f"สร้าง Excel สำเร็จ แต่ไม่สามารถสร้าง PDF ได้:\n{str(pdf_e)}")
                     self.show_success_dialog(filepath, "", "")
                     self.lbl_status.configure(text="บันทึกไฟล์ Excel สำเร็จ แต่สร้าง PDF ล้มเหลว")
                 
@@ -873,7 +977,85 @@ class DPostConverterGUI(ctk.CTk):
                     winsound.MessageBeep(winsound.MB_ICONHAND)
                 except Exception:
                     pass
-                messagebox.showerror("ข้อผิดพลาด", f"ไม่สามารถบันทึกไฟล์ได้:\n{str(e)}")
+                self.show_custom_msgbox("error", "ข้อผิดพลาด", f"ไม่สามารถบันทึกไฟล์ได้:\n{str(e)}")
+
+    def show_custom_msgbox(self, msg_type, title, message):
+        try:
+            import winsound
+            if msg_type == "error":
+                winsound.MessageBeep(winsound.MB_ICONHAND)
+            elif msg_type == "askyesno" or msg_type == "warning":
+                winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+            else:
+                winsound.MessageBeep(winsound.MB_OK)
+        except Exception:
+            pass
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(title)
+        dialog.geometry("450x250")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        # Center the dialog
+        self.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 450) // 2
+        y = self.winfo_y() + (self.winfo_height() - 250) // 2
+        dialog.geometry(f"+{x}+{y}")
+
+        main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Icon and Colors based on msg_type
+        if msg_type == "info":
+            icon_text = "ℹ️"
+            icon_color = "#3b82f6"  # Blue
+        elif msg_type == "warning":
+            icon_text = "⚠️"
+            icon_color = "#eab308"  # Yellow
+        elif msg_type == "error":
+            icon_text = "❌"
+            icon_color = "#ef4444"  # Red
+        elif msg_type == "askyesno":
+            icon_text = "❓"
+            icon_color = "#f97316"  # Orange
+        else:
+            icon_text = "ℹ️"
+            icon_color = COLOR_PRIMARY
+            
+        icon_lbl = ctk.CTkLabel(main_frame, text=icon_text, font=("Segoe UI", 48), text_color=icon_color)
+        icon_lbl.pack(pady=(0, 10))
+
+        msg_lbl = ctk.CTkLabel(main_frame, text=message, font=("Segoe UI", 14), text_color=COLOR_TEXT_MAIN, wraplength=400, justify="center")
+        msg_lbl.pack(pady=(0, 20), expand=True)
+
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(10, 0))
+
+        result = tk.BooleanVar(value=False)
+
+        def on_yes():
+            result.set(True)
+            dialog.destroy()
+
+        def on_no():
+            result.set(False)
+            dialog.destroy()
+
+        if msg_type == "askyesno":
+            btn_yes = ctk.CTkButton(btn_frame, text="ตกลง", command=on_yes, font=("Segoe UI", 12, "bold"), fg_color=COLOR_PRIMARY, hover_color="#14532d", width=120)
+            btn_yes.pack(side="left", padx=10, expand=True, anchor="e")
+            
+            btn_no = ctk.CTkButton(btn_frame, text="ยกเลิก", command=on_no, font=("Segoe UI", 12, "bold"), fg_color="#ef4444", hover_color="#b91c1c", width=120)
+            btn_no.pack(side="right", padx=10, expand=True, anchor="w")
+        else:
+            btn_ok = ctk.CTkButton(btn_frame, text="ตกลง", command=on_yes, font=("Segoe UI", 12, "bold"), fg_color=COLOR_PRIMARY, hover_color="#14532d", width=120)
+            btn_ok.pack(pady=0)
+
+        # Wait for user action
+        dialog.wait_window()
+        
+        return result.get()
 
     def show_success_dialog(self, excel_path, pdf_path, delivery_path):
         try:
@@ -907,11 +1089,15 @@ class DPostConverterGUI(ctk.CTk):
         paths_frame.pack(fill="x", expand=True)
         
         import os
-        files_text = f"📊 {os.path.basename(excel_path)}"
+        files_list = []
+        if excel_path:
+            files_list.append(f"📊 {os.path.basename(excel_path)}")
         if pdf_path:
-            files_text += f"\n📑 {os.path.basename(pdf_path)}"
+            files_list.append(f"📑 {os.path.basename(pdf_path)}")
         if delivery_path:
-            files_text += f"\n📑 {os.path.basename(delivery_path)}"
+            files_list.append(f"📑 {os.path.basename(delivery_path)}")
+            
+        files_text = "\n".join(files_list)
             
         files_lbl = ctk.CTkLabel(paths_frame, text=files_text, font=("Segoe UI", 12), text_color=COLOR_TEXT_MUTED, justify="left")
         files_lbl.pack(padx=15, pady=15, anchor="w")
@@ -1006,10 +1192,20 @@ class DPostConverterGUI(ctk.CTk):
         if self.dataframe is None or self.dataframe.empty:
             return
             
+        if 'SELECTED' not in self.dataframe.columns:
+            self.dataframe['SELECTED'] = True
+            
+        selected_mask = self.dataframe['SELECTED'] == True
+        if not selected_mask.any():
+            self.show_custom_msgbox("info", "ยังไม่ได้เลือกรายการ", "กรุณาเลือกรายการที่ต้องการสร้างจ่าหน้าซองก่อนครับ")
+            return
+            
+        target_df = self.dataframe[selected_mask]
+            
         # Check if barcodes exist
-        missing_barcodes = self.dataframe['BARCODE_NO'].isna() | (self.dataframe['BARCODE_NO'] == "")
+        missing_barcodes = target_df['BARCODE_NO'].isna() | (target_df['BARCODE_NO'] == "")
         if missing_barcodes.any():
-            messagebox.showwarning("ยังไม่ได้ออกเลขบาร์โค้ด", "กรุณากด 'บันทึกไฟล์' เพื่อออกเลขลงทะเบียนสำหรับทุกรายการก่อนครับ\n(หรือกรอกเลขบาร์โค้ดให้ครบในตาราง)")
+            self.show_custom_msgbox("info", "ยังไม่ได้ออกเลขบาร์โค้ด", "รายการที่เลือกยังไม่ได้ออกเลขบาร์โค้ด กรุณากด 'บันทึกไฟล์' ก่อนครับ\n(หรือกรอกเลขบาร์โค้ดให้ครบในตาราง)")
             return
             
         import datetime
@@ -1031,12 +1227,17 @@ class DPostConverterGUI(ctk.CTk):
             self.update_idletasks()
             
             from convert_dpost import generate_combined_pdf
-            generate_combined_pdf(self.dataframe, output_pdf, envelope_only=True)
+            generate_combined_pdf(target_df, output_pdf, envelope_only=True)
             
-            messagebox.showinfo("สำเร็จ", f"สร้างไฟล์จ่าหน้าซองสำเร็จ\n{output_pdf}")
+            self.show_success_dialog("", output_pdf, "")
             self.lbl_status.configure(text="สร้างไฟล์จ่าหน้าซองสำเร็จ")
+            
+            import os
+            import sys
+            if sys.platform == "win32":
+                os.startfile(output_pdf)
         except Exception as e:
-            messagebox.showerror("ข้อผิดพลาด", f"ไม่สามารถสร้างไฟล์จ่าหน้าซองได้:\n{str(e)}")
+            self.show_custom_msgbox("error", "ข้อผิดพลาด", f"ไม่สามารถสร้างไฟล์จ่าหน้าซองได้:\n{str(e)}")
             self.lbl_status.configure(text="เกิดข้อผิดพลาดในการสร้างไฟล์จ่าหน้าซอง")
 
 def main():
