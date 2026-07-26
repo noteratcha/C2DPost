@@ -1050,7 +1050,7 @@ def generate_custom_envelopes_pdf(dataframe, output_pdf_path):
         writer.write(f_out)
 
 def main():
-    print(f"โปรแกรมแปลงข้อมูล DPost (Version {__version__})")
+    print(f"C2DPost (Version {__version__})")
     # Find all PDFs in the current directory
     pdf_files = glob.glob("*.pdf")
     if not pdf_files:

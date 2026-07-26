@@ -29,7 +29,7 @@ COLOR_TEXT_MUTED = "#64748b"   # Muted slate
 class DPostConverterGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title(f"Convert PDF To Excel v{__version__}")
+        self.title(f"C2DPost v{__version__}")
         self.geometry("1300x800")
         self.after(0, lambda: self.state('zoomed'))
         self.configure(fg_color=COLOR_BG)
