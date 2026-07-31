@@ -7,6 +7,9 @@ import pandas as pd
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import customtkinter as ctk
+import requests
+import io
+from PIL import Image, ImageTk
 
 try:
     from convert_dpost import process_pdf, records_to_dataframe, fetch_registered_barcodes, generate_combined_pdf, generate_delivery_note_pdf, __version__
@@ -17,21 +20,342 @@ except Exception as e:
     sys.exit(1)
 ctk.set_appearance_mode("light")
 
-# Colors matching the user's screenshot
-COLOR_PRIMARY = "#15803d"      # Dark green (Header, primary buttons)
-COLOR_SUCCESS = "#16a34a"      # Green
-COLOR_BG = "#ebebeb"           # Default CustomTkinter light background
+# Modern Premium Colors (Emerald & Slate theme)
+COLOR_PRIMARY = "#059669"      # Emerald 600 (Header, primary buttons)
+COLOR_PRIMARY_HOVER = "#047857" # Emerald 700
+COLOR_SUCCESS = "#10b981"      # Emerald 500
+COLOR_SUCCESS_HOVER = "#059669"
+COLOR_BG = "#e2e8f0"           # Slate 200 (App background darker)
 COLOR_CARD = "#ffffff"         # White for cards
-COLOR_BORDER = "#cbd5e1"       # Light gray border
-COLOR_TEXT_MAIN = "#0f172a"    # Dark slate for main text
-COLOR_TEXT_MUTED = "#64748b"   # Muted slate
+COLOR_BORDER = "#cbd5e1"       # Slate 300 (Borders darker)
+COLOR_TEXT_MAIN = "#0f172a"    # Slate 900 (Main text)
+COLOR_TEXT_MUTED = "#475569"   # Slate 600 (Subtitles/Hints)
+COLOR_DANGER = "#ef4444"       # Red 500
+COLOR_DANGER_HOVER = "#dc2626" # Red 600
+
+def make_entry_context_menu(widget):
+    menu = tk.Menu(widget, tearoff=0)
+    menu.add_command(label="Copy", command=lambda: widget.event_generate("<<Copy>>"))
+    menu.add_command(label="Paste", command=lambda: widget.event_generate("<<Paste>>"))
+    menu.add_command(label="Cut", command=lambda: widget.event_generate("<<Cut>>"))
+    
+    def show_menu(event):
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+            
+    widget.bind("<Button-3>", show_menu)
+    
+    # Robust Ctrl+V paste handler for all keyboard layouts
+    def handle_ctrl_key(event):
+        # 86 is the hardware keycode for 'V' on Windows
+        if getattr(event, 'keycode', None) == 86 or getattr(event, 'char', '').lower() in ('v', 'อ', 'ฮ'):
+            try:
+                text = widget.clipboard_get()
+                try:
+                    widget.delete("sel.first", "sel.last")
+                except tk.TclError:
+                    pass
+                widget.insert(tk.INSERT, text)
+            except tk.TclError:
+                pass
+            return "break"
+            
+    widget.bind("<Control-Key>", handle_ctrl_key, add="+")
+
+class LoginWindow(ctk.CTkToplevel):
+    def __init__(self, master):
+        super().__init__(master)
+        self.title("เข้าสู่ระบบ C2DPost")
+        self.geometry("500x450")
+        self.resizable(False, False)
+        self.configure(fg_color=COLOR_BG)
+        
+        # Center the window
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() // 2) - (500 // 2)
+        y = (self.winfo_screenheight() // 2) - (450 // 2)
+        self.geometry(f"+{x}+{y}")
+        
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.transient(master)
+        self.grab_set()
+
+        # White Card Layout
+        self.card = ctk.CTkFrame(self, fg_color=COLOR_CARD, corner_radius=15, border_width=1, border_color=COLOR_BORDER)
+        self.card.pack(expand=True, padx=40, pady=40, fill="both")
+
+        self.lbl_title = ctk.CTkLabel(self.card, text="C2DPost Login", font=("Segoe UI", 28, "bold"), text_color=COLOR_PRIMARY)
+        self.lbl_title.pack(pady=(35, 25))
+
+        self.entry_username = ctk.CTkEntry(self.card, placeholder_text="Username", width=280, height=45, font=("Segoe UI", 14), corner_radius=8, border_color=COLOR_BORDER)
+        self.entry_username.pack(pady=(0, 15))
+        make_entry_context_menu(self.entry_username._entry)
+
+        self.entry_password = ctk.CTkEntry(self.card, placeholder_text="Password", show="*", width=280, height=45, font=("Segoe UI", 14), corner_radius=8, border_color=COLOR_BORDER)
+        self.entry_password.pack(pady=(0, 10))
+        self.entry_password.bind("<Return>", lambda e: self.login())
+        make_entry_context_menu(self.entry_password._entry)
+
+        self.lbl_error = ctk.CTkLabel(self.card, text="", text_color=COLOR_DANGER, font=("Segoe UI", 12))
+        self.lbl_error.pack(pady=(0, 10))
+
+        self.btn_login = ctk.CTkButton(self.card, text="เข้าสู่ระบบ", fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER, 
+                                       text_color="#ffffff", font=("Segoe UI", 16, "bold"), 
+                                       width=280, height=45, command=self.login, corner_radius=8)
+        self.btn_login.pack(pady=(5, 30))
+
+    def on_close(self):
+        self.master.destroy()
+
+    def login(self):
+        username = self.entry_username.get().strip()
+        password = self.entry_password.get().strip()
+
+        if not username or not password:
+            self.lbl_error.configure(text="กรุณากรอก Username และ Password")
+            return
+
+        self.btn_login.configure(state="disabled", text="กำลังตรวจสอบ...")
+        self.lbl_error.configure(text="")
+        
+        # Run in thread to not block UI
+        threading.Thread(target=self.verify_login, args=(username, password), daemon=True).start()
+
+    def verify_login(self, username, password):
+        sheet_url = "https://docs.google.com/spreadsheets/d/1hiWww6BI7NCTAw3Ai3CjbzS8TWdIX2AAOj7P_2BxMcQ/export?format=csv&gid=0"
+        try:
+            response = requests.get(sheet_url, timeout=10)
+            response.encoding = 'utf-8'
+            response.raise_for_status()
+            
+            # Read CSV
+            df = pd.read_csv(io.StringIO(response.text))
+            
+            # Filter rows
+            df['UserName'] = df['UserName'].astype(str).str.strip()
+            df['Password'] = df['Password'].astype(str).str.strip()
+            
+            user_row = df[(df['UserName'] == username) & (df['Password'] == password)]
+            
+            if not user_row.empty:
+                # Login successful
+                row_data = user_row.iloc[0].to_dict()
+                status = str(row_data.get('Status', '')).strip().upper()
+                
+                if status == "DOL":
+                    self.after(0, self.login_success, row_data)
+                elif status == "ADMIN":
+                    self.after(0, self.admin_login_success, row_data)
+                else:
+                    self.after(0, self.login_fail, "คุณไม่มีสิทธิ์เข้าถึงระบบ (Status ไม่ใช่ DOL หรือ ADMIN)")
+            else:
+                self.after(0, self.login_fail, "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
+                
+        except requests.exceptions.RequestException:
+            self.after(0, self.login_fail, "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้")
+        except Exception as e:
+            self.after(0, self.login_fail, f"เกิดข้อผิดพลาด: {str(e)}")
+
+    def login_success(self, user_data):
+        self.master.on_login_success(user_data)
+        self.destroy()
+
+    def admin_login_success(self, user_data):
+        self.master.on_admin_login_success(user_data)
+        self.destroy()
+
+    def login_fail(self, message):
+        self.btn_login.configure(state="normal", text="Login")
+        self.lbl_error.configure(text=message)
+        username = self.entry_username.get() if hasattr(self, 'entry_username') else "Unknown"
+        if username and hasattr(self, 'master') and hasattr(self.master, 'record_user_log'):
+            self.master.record_user_log(username, "Login - ไม่สำเร็จ")
+
+
+class AdminManagementWindow(ctk.CTkToplevel):
+    def __init__(self, master):
+        super().__init__(master)
+        self.title("ระบบจัดการผู้ใช้งาน (Management)")
+        self.geometry("1400x800")
+        self.after(0, lambda: self.state('zoomed'))
+        self.configure(fg_color=COLOR_BG)
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        
+        self.create_layout()
+        self.load_data()
+        
+    def on_close(self):
+        self.master.destroy()
+
+    def logout(self):
+        if self.master.user_data:
+            self.master.record_user_log(self.master.user_data.get("UserName", "Admin"), "Logout - สำเร็จ")
+        self.destroy()
+        self.master.user_data = None
+        self.master.show_login_window()
+
+    def create_layout(self):
+        # Title
+        header = ctk.CTkFrame(self, fg_color=COLOR_PRIMARY, corner_radius=0, height=60)
+        header.pack(fill='x', side='top')
+        header.pack_propagate(False)
+        ctk.CTkLabel(header, text="ระบบจัดการผู้ใช้งาน (Management)", font=("Segoe UI", 18, "bold"), text_color="#ffffff").pack(side='left', padx=30)
+        
+        btn_logout = ctk.CTkButton(header, text="ออกจากระบบ", fg_color="#dc2626", hover_color="#991b1b",
+                                 text_color="#ffffff", font=("Segoe UI", 12, "bold"),
+                                 height=28, width=120, corner_radius=14,
+                                 command=self.logout)
+        btn_logout.pack(side='right', padx=30)
+        
+        # Main container
+        container = ctk.CTkFrame(self, fg_color="transparent")
+        container.pack(fill='both', expand=True, padx=20, pady=15)
+        
+        # Left Panel: Data Entry Form
+        form_frame = ctk.CTkScrollableFrame(container, width=400, fg_color=COLOR_CARD, corner_radius=12, border_width=1, border_color=COLOR_BORDER)
+        form_frame.pack(side='left', fill='y', padx=(0, 15))
+        
+        ctk.CTkLabel(form_frame, text="ข้อมูลผู้ใช้งาน", font=("Segoe UI", 18, "bold"), text_color=COLOR_PRIMARY).pack(pady=(15, 20))
+        
+        self.entries = {}
+        fields = [
+            ("UserName", True), ("Password", True), ("Email", True), ("Prefix", True), 
+            ("Organization", True), ("ResponsiblePostoffice", True), ("ResponsibleZipcode", True), 
+            ("ActivationDate", True), ("ContactPerson1", True), ("TelContactPerson1", True),
+            ("ContactPerson2", False), ("TelContactPerson2", False), 
+            ("ContactPerson3", False), ("TelContactPerson3", False)
+        ]
+        
+        for field, req in fields:
+            lbl_text = f"{field} *" if req else field
+            ctk.CTkLabel(form_frame, text=lbl_text, font=("Segoe UI", 12), text_color=COLOR_TEXT_MAIN).pack(anchor='w', padx=10)
+            entry = ctk.CTkEntry(form_frame, width=350, height=35, corner_radius=8, border_color=COLOR_BORDER)
+            entry.pack(padx=10, pady=(0, 10))
+            make_entry_context_menu(entry._entry)
+            self.entries[field] = entry
+            
+        # Status Dropdown
+        ctk.CTkLabel(form_frame, text="Status *", font=("Segoe UI", 12), text_color=COLOR_TEXT_MAIN).pack(anchor='w', padx=10)
+        self.combo_status = ctk.CTkComboBox(form_frame, values=["DOL", "ADMIN", "INACTIVE"], width=350, height=35, corner_radius=8, border_color=COLOR_BORDER)
+        self.combo_status.set("DOL")
+        self.combo_status.pack(padx=10, pady=(0, 20))
+        
+        # Buttons
+        btn_frame = ctk.CTkFrame(form_frame, fg_color="transparent")
+        btn_frame.pack(fill='x', padx=10, pady=15)
+        
+        self.btn_save = ctk.CTkButton(btn_frame, text="บันทึก", fg_color=COLOR_SUCCESS, hover_color=COLOR_SUCCESS_HOVER, corner_radius=8, height=38, font=("Segoe UI", 14, "bold"), command=self.save_data)
+        self.btn_save.pack(side='left', expand=True, padx=5)
+        
+        self.btn_clear = ctk.CTkButton(btn_frame, text="ล้าง", fg_color=COLOR_TEXT_MUTED, hover_color="#334155", corner_radius=8, height=38, font=("Segoe UI", 14, "bold"), command=self.clear_form)
+        self.btn_clear.pack(side='left', expand=True, padx=5)
+        
+        # Right Panel: Treeview
+        tree_container = ctk.CTkFrame(container, fg_color=COLOR_CARD, corner_radius=12, border_width=1, border_color=COLOR_BORDER)
+        tree_container.pack(side='right', fill='both', expand=True)
+        
+        tree_header = ctk.CTkFrame(tree_container, fg_color="transparent")
+        tree_header.pack(fill='x', padx=20, pady=15)
+        ctk.CTkLabel(tree_header, text="รายชื่อผู้ใช้ในระบบ", font=("Segoe UI", 18, "bold"), text_color=COLOR_TEXT_MAIN).pack(side='left')
+        
+        self.btn_refresh = ctk.CTkButton(tree_header, text="รีเฟรชข้อมูล", width=120, height=35, corner_radius=8, fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER, font=("Segoe UI", 12, "bold"), command=self.load_data)
+        self.btn_refresh.pack(side='right')
+        
+        # Setup Treeview
+        table_frame = tk.Frame(tree_container, bg=COLOR_CARD)
+        table_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        vsb = ctk.CTkScrollbar(table_frame, orientation="vertical")
+        hsb = ctk.CTkScrollbar(table_frame, orientation="horizontal")
+        
+        self.tree = ttk.Treeview(table_frame, selectmode="browse", yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        vsb.configure(command=self.tree.yview)
+        hsb.configure(command=self.tree.xview)
+        
+        vsb.pack(side='right', fill='y')
+        hsb.pack(side='bottom', fill='x')
+        self.tree.pack(side='left', fill='both', expand=True)
+        
+        # Columns based on sheet
+        self.tree_cols = [f[0] for f in fields] + ["Status"]
+        self.tree["columns"] = self.tree_cols
+        self.tree["show"] = "headings"
+        
+        for col in self.tree_cols:
+            self.tree.heading(col, text=col)
+            self.tree.column(col, width=120, minwidth=100)
+            
+        self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
+        
+    def clear_form(self):
+        for entry in self.entries.values():
+            entry.delete(0, 'end')
+        self.combo_status.set("DOL")
+        
+    def on_tree_select(self, event):
+        selected = self.tree.selection()
+        if not selected: return
+        item = self.tree.item(selected[0])
+        values = item['values']
+        
+        self.clear_form()
+        for i, col in enumerate(self.tree_cols):
+            val = str(values[i]) if values[i] is not None and str(values[i]) != "nan" else ""
+            if col == "Status":
+                self.combo_status.set(val)
+            else:
+                self.entries[col].insert(0, val)
+
+    def load_data(self):
+        sheet_url = "https://docs.google.com/spreadsheets/d/1hiWww6BI7NCTAw3Ai3CjbzS8TWdIX2AAOj7P_2BxMcQ/export?format=csv&gid=0"
+        try:
+            self.btn_refresh.configure(state="disabled", text="กำลังโหลด...")
+            # Use thread to not freeze UI
+            threading.Thread(target=self._fetch_data_thread, args=(sheet_url,), daemon=True).start()
+        except Exception as e:
+            messagebox.showerror("Error", f"โหลดข้อมูลล้มเหลว: {str(e)}")
+            self.btn_refresh.configure(state="normal", text="รีเฟรชข้อมูล")
+
+    def _fetch_data_thread(self, url):
+        try:
+            response = requests.get(url, timeout=10)
+            response.encoding = 'utf-8'
+            response.raise_for_status()
+            df = pd.read_csv(io.StringIO(response.text))
+            self.after(0, self._update_tree, df)
+        except Exception as e:
+            self.after(0, lambda: messagebox.showerror("Error", f"โหลดข้อมูลล้มเหลว: {str(e)}"))
+        finally:
+            self.after(0, lambda: self.btn_refresh.configure(state="normal", text="รีเฟรชข้อมูล"))
+
+    def _update_tree(self, df):
+        # Clear tree
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        # Populate tree
+        for index, row in df.iterrows():
+            row_vals = [row.get(col, "") for col in self.tree_cols]
+            self.tree.insert("", "end", values=row_vals)
+            
+    def save_data(self):
+        required = ["UserName", "Password", "Email", "Prefix", "Organization", "ResponsiblePostoffice", "ResponsibleZipcode", "ActivationDate", "ContactPerson1", "TelContactPerson1"]
+        for req in required:
+            if not self.entries[req].get().strip():
+                messagebox.showwarning("คำเตือน", f"กรุณาระบุ {req}")
+                return
+                
+        messagebox.showinfo("แจ้งเตือน", "ข้อมูลพร้อมบันทึก\n(รอการเชื่อมต่อ API หรือสคริปต์สำหรับเขียนข้อมูลลง Google Sheets)")
+
 
 class DPostConverterGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
+        self.withdraw()  # Hide main window initially
         self.title(f"C2DPost v{__version__}")
         self.geometry("1300x800")
-        self.after(0, lambda: self.state('zoomed'))
         self.configure(fg_color=COLOR_BG)
         
         self.selected_files = []
@@ -39,6 +363,7 @@ class DPostConverterGUI(ctk.CTk):
         self.dataframe = None
         self.current_theme = "light"
         self.last_pdf_dir = None
+        self.user_data = None
         
         self.create_layout()
         self.style_treeview()
@@ -57,6 +382,89 @@ class DPostConverterGUI(ctk.CTk):
         self.tools_hover_x_img = self.create_tools_image("#ef4444", "#94a3b8")
         self.tools_hover_view_img = self.create_tools_image("#94a3b8", "#3b82f6")
         self.tooltip_window = None
+
+        # Show login window
+        self.after(100, self.show_login_window)
+
+    def show_login_window(self):
+        self.login_window = LoginWindow(self)
+        
+    def logout(self):
+        if self.user_data:
+            self.record_user_log(self.user_data.get("UserName", "Unknown"), "Logout - สำเร็จ")
+        self.withdraw()
+        self.user_data = None
+        
+        # Clear previous session data automatically
+        self.selected_files = []
+        self.parsed_records = []
+        self.dataframe = None
+        self.lbl_status.configure(text="ยังไม่ได้เลือกไฟล์")
+        self.lbl_stat_files.configure(text="ไฟล์ PDF: 0 ไฟล์")
+        self.lbl_stat_records.configure(text="รายการผู้รับ: 0 รายการ")
+        self.btn_export.configure(state='disabled')
+        self.btn_envelope.configure(state='disabled')
+        self.btn_select_files.configure(text=" เพิ่มไฟล์ PDF ", state='normal')
+        if hasattr(self, 'search_entry'):
+            self.search_entry.delete(0, 'end')
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        self.show_login_window()
+
+    def on_login_success(self, user_data):
+        self.user_data = user_data
+        self.record_user_log(user_data.get("UserName", "Unknown"), "Login - สำเร็จ")
+        
+        org_name = user_data.get("Organization", "สำนักงานที่ดิน")
+        if pd.isna(org_name) or str(org_name).strip() == "":
+            org_name = "สำนักงานที่ดิน"
+        
+        self.lbl_header_title.configure(text=str(org_name).strip())
+        
+        self.deiconify()
+        self.state('zoomed')
+
+    def on_admin_login_success(self, user_data):
+        self.user_data = user_data
+        self.record_user_log(user_data.get("UserName", "Admin"), "Login - สำเร็จ")
+        # Don't show main GUI, show Admin Management
+        self.admin_window = AdminManagementWindow(self)
+
+    def record_user_log(self, username, action_status):
+        # TODO: Replace with your deployed Google Apps Script Web App URL
+        script_url = "https://script.google.com/macros/s/AKfycbzNEBcaLUc7UWSXtLuf3VnaTR4pP_4Xfxwaq8zKOQHGolyQL9UT2RAGKaT8jtBCzko/exec"
+        
+        if script_url == "YOUR_WEB_APP_URL_HERE":
+            return
+            
+        def _send_log():
+            try:
+                data = {
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "username": username,
+                    "status": action_status
+                }
+                requests.post(script_url, json=data, timeout=5)
+            except Exception as e:
+                print(f"Failed to record user log: {e}")
+                
+        threading.Thread(target=_send_log, daemon=True).start()
+
+    def record_detailed_barcodes(self, records):
+        # TODO: Replace with your deployed Google Apps Script Web App URL for Barcode Sheet
+        script_url = "https://script.google.com/macros/s/AKfycbyznLrLf7Qgi0glxzytW8uhpZfnu5Jkh_eUibgJxBe8z9dmBDs7ndM6deT6x8v59Q/exec"
+        
+        if script_url == "YOUR_BARCODE_WEB_APP_URL_HERE":
+            return
+            
+        def _send_log():
+            try:
+                requests.post(script_url, json={"action": "log_detailed_barcodes", "data": records}, timeout=10)
+            except Exception as e:
+                print(f"Failed to record detailed barcodes: {e}")
+                
+        threading.Thread(target=_send_log, daemon=True).start()
 
     def create_tools_image(self, x_color, view_color):
         img = tk.PhotoImage(width=100, height=16)
@@ -104,17 +512,24 @@ class DPostConverterGUI(ctk.CTk):
         return img
 
     def create_layout(self):
-        # 1. Header Banner (Green)
-        header = ctk.CTkFrame(self, fg_color=COLOR_PRIMARY, corner_radius=0, height=60)
+        # 1. Header Banner (Emerald)
+        header = ctk.CTkFrame(self, fg_color=COLOR_PRIMARY, corner_radius=0, height=65)
         header.pack(fill='x', side='top')
         header.pack_propagate(False)
-        ctk.CTkLabel(header, text="สำนักงานที่ดิน", font=("Segoe UI", 18, "bold"), text_color="#ffffff").pack(side='left', padx=30)
+        self.lbl_header_title = ctk.CTkLabel(header, text="สำนักงานที่ดิน", font=("Segoe UI", 20, "bold"), text_color="#ffffff")
+        self.lbl_header_title.pack(side='left', padx=30)
         
-        btn_info = ctk.CTkButton(header, text="ℹ", fg_color="#0f5128", hover_color="#0b3d1e",
-                                 text_color="#ffffff", font=("Segoe UI", 12, "bold"),
-                                 width=24, height=24, corner_radius=12,
+        btn_logout = ctk.CTkButton(header, text="ออกจากระบบ", fg_color=COLOR_DANGER, hover_color=COLOR_DANGER_HOVER,
+                                 text_color="#ffffff", font=("Segoe UI", 14, "bold"),
+                                 height=32, width=130, corner_radius=8,
+                                 command=self.logout)
+        btn_logout.pack(side='right', padx=(15, 30))
+
+        btn_info = ctk.CTkButton(header, text="ⓘ", fg_color="#047857", hover_color="#064e3b",
+                                 text_color="#ffffff", font=("Segoe UI", 14, "bold"),
+                                 width=32, height=32, corner_radius=16,
                                  command=self.show_supported_docs)
-        btn_info.pack(side='right', padx=(10, 30))
+        btn_info.pack(side='right', padx=(10, 0))
         
         def open_dpost_website():
             import webbrowser
@@ -124,18 +539,18 @@ class DPostConverterGUI(ctk.CTk):
             import webbrowser
             webbrowser.open("https://e-ar.thailandpost.com/")
             
-        btn_ear = ctk.CTkButton(header, text="🔗    e-AR", fg_color="#0f5128", hover_color="#0b3d1e",
-                                 text_color="#ffffff", font=("Segoe UI", 12, "bold"),
-                                 height=28, corner_radius=14,
+        btn_ear = ctk.CTkButton(header, text="e-AR", fg_color="#047857", hover_color="#064e3b",
+                                 text_color="#ffffff", font=("Segoe UI", 14, "bold"),
+                                 height=32, corner_radius=8,
                                  command=open_ear_website)
         btn_ear.pack(side='right', padx=(10, 0))
         
         btn_ear.bind("<Enter>", lambda event: self.show_tooltip("เว็บสำหรับตรวจใบตอบรับทางอิเล็กทรอนิกส์", event.x_root + 10, event.y_root + 10))
         btn_ear.bind("<Leave>", lambda event: self.hide_tooltip())
             
-        btn_dpost = ctk.CTkButton(header, text="🔗    DPost", fg_color="#0f5128", hover_color="#0b3d1e",
-                                 text_color="#ffffff", font=("Segoe UI", 12, "bold"),
-                                 height=28, corner_radius=14,
+        btn_dpost = ctk.CTkButton(header, text="DPost", fg_color="#047857", hover_color="#064e3b",
+                                 text_color="#ffffff", font=("Segoe UI", 14, "bold"),
+                                 height=32, corner_radius=8,
                                  command=open_dpost_website)
         btn_dpost.pack(side='right')
         
@@ -153,17 +568,17 @@ class DPostConverterGUI(ctk.CTk):
         container.rowconfigure(1, weight=1)
         
         # Card 1: File Selection
-        card_files = ctk.CTkFrame(container, fg_color=COLOR_CARD, corner_radius=10, border_width=1, border_color=COLOR_BORDER)
+        card_files = ctk.CTkFrame(container, fg_color=COLOR_CARD, corner_radius=12, border_width=1, border_color=COLOR_BORDER)
         card_files.grid(row=0, column=0, sticky='nsew', pady=(0, 15))
         
-        ctk.CTkLabel(card_files, text="📄 เลือกเอกสาร PDF", font=("Segoe UI", 14, "bold"), text_color=COLOR_PRIMARY).pack(anchor='w', padx=20, pady=(15, 5))
+        ctk.CTkLabel(card_files, text="เลือกเอกสาร PDF", font=("Segoe UI", 16, "bold"), text_color=COLOR_PRIMARY).pack(anchor='w', padx=20, pady=(15, 5))
         
         btn_frame = ctk.CTkFrame(card_files, fg_color="transparent")
         btn_frame.pack(fill='x', padx=20, pady=(5, 12))
         
-        self.btn_select_files = ctk.CTkButton(btn_frame, text=" ➕ เพิ่มไฟล์ PDF ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
+        self.btn_select_files = ctk.CTkButton(btn_frame, text="เพิ่มไฟล์ PDF", fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER,
                                                 text_color="#ffffff",
-                                                font=("Segoe UI", 12, "bold"), command=self.select_files, width=150, height=36)
+                                                font=("Segoe UI", 14, "bold"), command=self.select_files, width=160, height=40, corner_radius=8)
         self.btn_select_files.pack(side='left', padx=(0, 10))
         
         # Add tooltip for select files button
@@ -181,16 +596,16 @@ class DPostConverterGUI(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(self.status_box, text="ยังไม่ได้เลือกไฟล์", font=("Segoe UI", 12), text_color=COLOR_PRIMARY)
         self.lbl_status.pack(fill='both', expand=True, pady=(8, 8))
         
-        self.btn_envelope = ctk.CTkButton(btn_frame, text=" ✉️ สร้างจ่าหน้าซอง ", fg_color="#3b82f6", hover_color="#2563eb",
+        self.btn_envelope = ctk.CTkButton(btn_frame, text="สร้างจ่าหน้าซอง", fg_color="#3b82f6", hover_color="#2563eb",
                                         text_color="#ffffff",
-                                        font=("Segoe UI", 12, "bold"), command=self.export_envelope, state='disabled', width=140, height=36)
-        self.btn_envelope.pack(side='right', padx=(10, 0))
+                                        font=("Segoe UI", 14, "bold"), command=self.export_envelope, state='disabled', width=160, height=40, corner_radius=8)
+        self.btn_envelope.pack(side='right', padx=(15, 0))
         self.btn_envelope.bind("<Enter>", lambda event: self.show_tooltip("ต้องบันทึกไฟล์ก่อน จึงจะสร้างจ่าหน้าซองได้", event.x_root + 10, event.y_root + 10))
         self.btn_envelope.bind("<Leave>", lambda event: self.hide_tooltip())
         
-        self.btn_export = ctk.CTkButton(btn_frame, text=" 📥 บันทึกไฟล์ ", fg_color=COLOR_PRIMARY, hover_color="#14532d",
+        self.btn_export = ctk.CTkButton(btn_frame, text="บันทึกไฟล์", fg_color=COLOR_SUCCESS, hover_color=COLOR_SUCCESS_HOVER,
                                         text_color="#ffffff",
-                                        font=("Segoe UI", 12, "bold"), command=self.export_excel, state='disabled', width=140, height=36)
+                                        font=("Segoe UI", 14, "bold"), command=self.export_excel, state='disabled', width=160, height=40, corner_radius=8)
         self.btn_export.pack(side='right')
         
         # Add tooltip for save button
@@ -206,23 +621,23 @@ class DPostConverterGUI(ctk.CTk):
         preview_header = ctk.CTkFrame(card_preview, fg_color="transparent")
         preview_header.pack(fill='x', padx=20, pady=(15, 10))
         
-        ctk.CTkLabel(preview_header, text="📊 ตารางแสดงข้อมูล", font=("Segoe UI", 14, "bold"), text_color=COLOR_PRIMARY).pack(side='left')
+        ctk.CTkLabel(preview_header, text="ตารางแสดงข้อมูล", font=("Segoe UI", 16, "bold"), text_color=COLOR_PRIMARY).pack(side='left')
         
         # Right aligned stats and search
-        self.search_entry = ctk.CTkEntry(preview_header, placeholder_text=" 🔍 ค้นหาผู้รับ / เลขอ้างอิง... ", width=250, height=30, font=("Segoe UI", 11), corner_radius=15)
+        self.search_entry = ctk.CTkEntry(preview_header, placeholder_text=" ค้นหาผู้รับ / เลขอ้างอิง... ", width=250, height=30, font=("Segoe UI", 11), corner_radius=15)
         self.search_entry.pack(side='right', padx=(15, 0))
         
-        self.btn_clear = ctk.CTkButton(preview_header, text=" 🧹 ล้างข้อมูล ", fg_color="#ef4444", 
-                                       hover_color="#b91c1c", text_color="#ffffff",
-                                       font=("Segoe UI", 11, "bold"), command=self.clear_selection, width=95, height=30, corner_radius=15)
+        self.btn_clear = ctk.CTkButton(preview_header, text="ล้างข้อมูล", fg_color=COLOR_DANGER, 
+                                       hover_color=COLOR_DANGER_HOVER, text_color="#ffffff",
+                                       font=("Segoe UI", 12, "bold"), command=self.clear_selection, width=110, height=30, corner_radius=15)
         self.btn_clear.pack(side='right', padx=(10, 0))
         self.btn_clear.bind("<Enter>", lambda event: self.show_tooltip("ลบข้อมูลทั้งหมด", event.x_root + 10, event.y_root + 10))
         self.btn_clear.bind("<Leave>", lambda event: self.hide_tooltip())
         
-        self.lbl_stat_records = ctk.CTkLabel(preview_header, text="👥 รายการผู้รับ: 0 รายการ", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
+        self.lbl_stat_records = ctk.CTkLabel(preview_header, text="รายการผู้รับ: 0 รายการ", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
         self.lbl_stat_records.pack(side='right', padx=10)
         
-        self.lbl_stat_files = ctk.CTkLabel(preview_header, text="📄 ไฟล์ PDF: 0 ไฟล์", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
+        self.lbl_stat_files = ctk.CTkLabel(preview_header, text="ไฟล์ PDF: 0 ไฟล์", font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_MUTED)
         self.lbl_stat_files.pack(side='right', padx=10)
         self.lbl_stat_files.bind("<Button-1>", self.show_selected_files_popup)
         self.lbl_stat_files.configure(cursor="hand2")
@@ -326,6 +741,9 @@ class DPostConverterGUI(ctk.CTk):
         if self.dataframe is None or self.dataframe.empty:
             return
             
+        col_max_widths = {col[0]: col[2] for col in self.columns}
+
+            
         for idx, row in self.dataframe.iterrows():
             matches = False
             if not query:
@@ -346,16 +764,33 @@ class DPostConverterGUI(ctk.CTk):
                 is_selected = self.dataframe.at[idx, 'SELECTED']
                 chk_text = "[ ✓ ]" if is_selected else "[   ]"
                 
+                # Calculate text widths dynamically (approximate pixel width)
+                barcode_val = str(row.get('BARCODE_NO', ''))
+                ref_val = str(row.get('INV_NO', ''))
+                receiver_val = str(row.get('RECEIVER', ''))
+                zip_val = str(row.get('RECEIVER_ZIPCODE', ''))
+                
+                col_max_widths['Barcode'] = max(col_max_widths['Barcode'], len(barcode_val) * 7 + 30)
+                col_max_widths['Ref'] = max(col_max_widths['Ref'], len(ref_val) * 7 + 30)
+                col_max_widths['Receiver'] = max(col_max_widths['Receiver'], len(receiver_val) * 7 + 30)
+                col_max_widths['Address'] = max(col_max_widths['Address'], len(addr) * 7 + 30)
+                
                 tags = (tag, 'selected_row') if is_selected else (tag,)
                 self.tree.insert("", "end", iid=str(idx), image=self.tools_normal_img, values=(
                     chk_text,
                     idx + 1,
-                    row.get('BARCODE_NO', ''),
-                    row.get('INV_NO', ''),
-                    row.get('RECEIVER', ''),
+                    barcode_val,
+                    ref_val,
+                    receiver_val,
                     addr,
-                    row.get('RECEIVER_ZIPCODE', '')
+                    zip_val
                 ), tags=tags)
+                
+        # Apply dynamic column widths after loading all rows
+        for col_id, max_w in col_max_widths.items():
+            # Cap maximum width for Address to avoid pushing everything else off-screen
+            final_width = min(max_w, 600) if col_id == "Address" else max_w
+            self.tree.column(col_id, width=final_width)
 
     def clear_search(self, event=None):
         self.search_entry.delete(0, 'end')
@@ -615,6 +1050,16 @@ class DPostConverterGUI(ctk.CTk):
         if not self.show_custom_msgbox("askyesno", "ยืนยันการลบ", "คุณต้องการลบข้อมูลที่เลือกใช่หรือไม่?\n\n(ระบบจะนำไฟล์ PDF ต้นฉบับของข้อมูลเหล่านี้ออกจากรายการด้วย)"):
             return
             
+        if self.user_data:
+            receiver_names = []
+            for iid in selected_iids:
+                row_values = self.tree.item(iid, 'values')
+                if len(row_values) > 4:
+                    receiver_names.append(str(row_values[4]))
+            names_str = ", ".join(receiver_names)
+            if len(names_str) > 100:
+                names_str = names_str[:97] + "..."
+
         try:
             indices_to_delete = [int(iid) for iid in selected_iids]
             
@@ -641,14 +1086,19 @@ class DPostConverterGUI(ctk.CTk):
                 self.parsed_records = self.dataframe.to_dict('records') if not self.dataframe.empty else []
                 
                 # Update UI
-                self.lbl_stat_files.configure(text=f"📄 ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
-                self.lbl_stat_records.configure(text=f"👥 รายการผู้รับ: {len(self.dataframe)} รายการ")
+                self.lbl_stat_files.configure(text=f"ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
+                self.lbl_stat_records.configure(text=f"รายการผู้รับ: {len(self.dataframe)} รายการ")
                 
                 if self.dataframe.empty:
                     self.clear_selection()
                 else:
                     self.filter_treeview()
+                    
+            if self.user_data:
+                self.record_user_log(self.user_data.get("UserName", "Unknown"), f"Delete: {names_str} - สำเร็จ")
         except Exception as e:
+            if self.user_data:
+                self.record_user_log(self.user_data.get("UserName", "Unknown"), f"Delete: {names_str} - ไม่สำเร็จ")
             self.show_custom_msgbox("error", "เกิดข้อผิดพลาด", f"ไม่สามารถลบรายการได้เนื่องจาก:\n{str(e)}")
 
     def open_pdf(self, event=None):
@@ -718,15 +1168,18 @@ class DPostConverterGUI(ctk.CTk):
         self.parsed_records = []
         self.dataframe = None
         self.lbl_status.configure(text="ยังไม่ได้เลือกไฟล์")
-        self.lbl_stat_files.configure(text="📄 ไฟล์ PDF: 0 ไฟล์")
-        self.lbl_stat_records.configure(text="👥 รายการผู้รับ: 0 รายการ")
+        self.lbl_stat_files.configure(text="ไฟล์ PDF: 0 ไฟล์")
+        self.lbl_stat_records.configure(text="รายการผู้รับ: 0 รายการ")
         
         self.btn_export.configure(state='disabled')
         self.btn_envelope.configure(state='disabled')
-        self.btn_select_files.configure(text=" ➕ เพิ่มไฟล์ PDF ", state='normal')
+        self.btn_select_files.configure(text=" เพิ่มไฟล์ PDF ", state='normal')
         
         for item in self.tree.get_children():
             self.tree.delete(item)
+            
+        if self.user_data:
+            self.record_user_log(self.user_data.get("UserName", "Unknown"), "Clear All Data - สำเร็จ")
 
     def select_files(self):
         files = filedialog.askopenfilenames(
@@ -749,6 +1202,9 @@ class DPostConverterGUI(ctk.CTk):
                 self.start_conversion(new_files)
 
     def start_conversion(self, files_to_process):
+        if not files_to_process:
+            return
+
         self.btn_select_files.configure(state='disabled')
         self.btn_clear.configure(state='disabled')
         self.btn_export.configure(state='disabled')
@@ -832,19 +1288,29 @@ class DPostConverterGUI(ctk.CTk):
                 
             self.parsed_records = self.dataframe.to_dict('records')
             
-            self.lbl_stat_files.configure(text=f"📄 ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
-            self.lbl_stat_records.configure(text=f"👥 รายการผู้รับ: {len(self.dataframe)} รายการ")
+            self.lbl_stat_files.configure(text=f"ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
+            self.lbl_stat_records.configure(text=f"รายการผู้รับ: {len(self.dataframe)} รายการ")
             self.lbl_status.configure(text=f"ประมวลผลเสร็จสิ้น รวมทั้งหมด {len(self.dataframe)} รายการ")
+            
+            if self.user_data:
+                file_names = ", ".join([os.path.basename(f) for f in self.selected_files]) if self.selected_files else f"{len(new_records)} items"
+                self.record_user_log(self.user_data.get("UserName", "Unknown"), f"Load PDF: {file_names} - สำเร็จ")
             
             self.filter_treeview()
         else:
-            self.lbl_stat_files.configure(text=f"📄 ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
-            self.lbl_stat_records.configure(text=f"👥 รายการผู้รับ: {len(self.dataframe) if self.dataframe is not None else 0} รายการ")
+            self.lbl_stat_files.configure(text=f"ไฟล์ PDF: {len(self.selected_files)} ไฟล์")
+            self.lbl_stat_records.configure(text=f"รายการผู้รับ: {len(self.dataframe) if self.dataframe is not None else 0} รายการ")
             
             if not self.parsed_records:
                 self.lbl_status.configure(text="ไม่พบข้อมูลในไฟล์ที่เลือก")
+                if self.user_data:
+                    file_names = ", ".join([os.path.basename(f) for f in self.selected_files]) if self.selected_files else "Unknown"
+                    self.record_user_log(self.user_data.get("UserName", "Unknown"), f"Load PDF: {file_names} - ไม่สำเร็จ")
             else:
                 self.lbl_status.configure(text=f"ประมวลผลเสร็จสิ้น รวมทั้งหมด {len(self.dataframe)} รายการ")
+                if self.user_data:
+                    file_names = ", ".join([os.path.basename(f) for f in self.selected_files]) if self.selected_files else "Unknown"
+                    self.record_user_log(self.user_data.get("UserName", "Unknown"), f"Load PDF: {file_names} - สำเร็จ")
         
         self.btn_select_files.configure(state='normal')
         self.btn_clear.configure(state='normal')
@@ -921,14 +1387,37 @@ class DPostConverterGUI(ctk.CTk):
                 for i in range(num_records):
                     if i < len(barcodes):
                         self.dataframe.at[i, 'BARCODE_NO'] = barcodes[i]
-                        self.dataframe.at[i, 'SELECTED'] = False
+                        self.dataframe.at[i, 'SELECTED'] = True
                     else:
                         self.dataframe.at[i, 'BARCODE_NO'] = ""
-                        self.dataframe.at[i, 'SELECTED'] = False
+                        self.dataframe.at[i, 'SELECTED'] = True
                         
-                # Update header to unchecked since default is now False
+                # Update header to checked since default is now True
                 if len(barcodes) > 0 and len(barcodes) == num_records:
-                    self.tree.heading("Select", text="[   ]")
+                    self.tree.heading("Select", text="[ ✓ ]")
+                    
+                # Generate detailed barcode logs
+                barcode_logs = []
+                for i in range(num_records):
+                    if i < len(barcodes):
+                        barcode = barcodes[i]
+                        receiver = str(self.dataframe.at[i, 'RECEIVER']) if pd.notna(self.dataframe.at[i, 'RECEIVER']) else ""
+                        address = str(self.dataframe.at[i, 'RECEIVER_ADDRESS']) if pd.notna(self.dataframe.at[i, 'RECEIVER_ADDRESS']) else ""
+                        amphur = str(self.dataframe.at[i, 'RECEIVER_AMPHUR']) if 'RECEIVER_AMPHUR' in self.dataframe.columns and pd.notna(self.dataframe.at[i, 'RECEIVER_AMPHUR']) else ""
+                        province = str(self.dataframe.at[i, 'RECEIVER_PROVINCE']) if 'RECEIVER_PROVINCE' in self.dataframe.columns and pd.notna(self.dataframe.at[i, 'RECEIVER_PROVINCE']) else ""
+                        zipcode = str(self.dataframe.at[i, 'RECEIVER_ZIPCODE']) if pd.notna(self.dataframe.at[i, 'RECEIVER_ZIPCODE']) else ""
+                        
+                        details = " ".join([part for part in [receiver, address, amphur, province, zipcode] if part.strip()])
+                        
+                        barcode_logs.append({
+                            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "username": self.user_data.get("UserName", "Unknown") if self.user_data else "Unknown",
+                            "barcode": barcode,
+                            "details": details
+                        })
+                
+                if barcode_logs:
+                    self.record_detailed_barcodes(barcode_logs)
                         
                 # Update the UI table to show the fetched barcodes
                 self.filter_treeview()
@@ -960,10 +1449,14 @@ class DPostConverterGUI(ctk.CTk):
                     generate_delivery_note_pdf(self.dataframe, delivery_note_filepath)
                     self.show_success_dialog(filepath, pdf_filepath, delivery_note_filepath)
                     self.lbl_status.configure(text="บันทึกไฟล์ Excel, PDF รวม และ ใบนำส่ง สำเร็จ")
+                    if hasattr(self, 'user_data') and self.user_data:
+                        self.record_user_log(self.user_data.get("UserName", "Unknown"), f"Export Excel ({len(self.dataframe)} items) - สำเร็จ")
                 except Exception as pdf_e:
                     self.show_custom_msgbox("error", "ข้อผิดพลาด PDF", f"สร้าง Excel สำเร็จ แต่ไม่สามารถสร้าง PDF ได้:\n{str(pdf_e)}")
                     self.show_success_dialog(filepath, "", "")
                     self.lbl_status.configure(text="บันทึกไฟล์ Excel สำเร็จ แต่สร้าง PDF ล้มเหลว")
+                    if hasattr(self, 'user_data') and self.user_data:
+                        self.record_user_log(self.user_data.get("UserName", "Unknown"), f"Export Excel ({len(self.dataframe)} items) - สำเร็จ (PDF Fail)")
                 
                 if sys.platform == "win32":
                     os.startfile(filepath)
@@ -978,6 +1471,8 @@ class DPostConverterGUI(ctk.CTk):
                 except Exception:
                     pass
                 self.show_custom_msgbox("error", "ข้อผิดพลาด", f"ไม่สามารถบันทึกไฟล์ได้:\n{str(e)}")
+                if hasattr(self, 'user_data') and self.user_data:
+                    self.record_user_log(self.user_data.get("UserName", "Unknown"), f"Export Excel ({len(self.dataframe)} items) - ไม่สำเร็จ")
 
     def show_custom_msgbox(self, msg_type, title, message):
         try:
@@ -993,14 +1488,15 @@ class DPostConverterGUI(ctk.CTk):
 
         dialog = ctk.CTkToplevel(self)
         dialog.title(title)
-        dialog.geometry("450x250")
+        dialog.geometry("450x300")
+        dialog.configure(fg_color=COLOR_CARD)
         dialog.transient(self)
         dialog.grab_set()
 
         # Center the dialog
         self.update_idletasks()
         x = self.winfo_x() + (self.winfo_width() - 450) // 2
-        y = self.winfo_y() + (self.winfo_height() - 250) // 2
+        y = self.winfo_y() + (self.winfo_height() - 300) // 2
         dialog.geometry(f"+{x}+{y}")
 
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -1008,19 +1504,19 @@ class DPostConverterGUI(ctk.CTk):
 
         # Icon and Colors based on msg_type
         if msg_type == "info":
-            icon_text = "ℹ️"
+            icon_text = "i️"
             icon_color = "#3b82f6"  # Blue
         elif msg_type == "warning":
-            icon_text = "⚠️"
+            icon_text = ""
             icon_color = "#eab308"  # Yellow
         elif msg_type == "error":
-            icon_text = "❌"
+            icon_text = ""
             icon_color = "#ef4444"  # Red
         elif msg_type == "askyesno":
-            icon_text = "❓"
+            icon_text = ""
             icon_color = "#f97316"  # Orange
         else:
-            icon_text = "ℹ️"
+            icon_text = "i️"
             icon_color = COLOR_PRIMARY
             
         icon_lbl = ctk.CTkLabel(main_frame, text=icon_text, font=("Segoe UI", 48), text_color=icon_color)
@@ -1043,13 +1539,13 @@ class DPostConverterGUI(ctk.CTk):
             dialog.destroy()
 
         if msg_type == "askyesno":
-            btn_yes = ctk.CTkButton(btn_frame, text="ตกลง", command=on_yes, font=("Segoe UI", 12, "bold"), fg_color=COLOR_PRIMARY, hover_color="#14532d", width=120)
+            btn_yes = ctk.CTkButton(btn_frame, text="ตกลง", command=on_yes, font=("Segoe UI", 14, "bold"), fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER, width=130, height=36, corner_radius=8)
             btn_yes.pack(side="left", padx=10, expand=True, anchor="e")
             
-            btn_no = ctk.CTkButton(btn_frame, text="ยกเลิก", command=on_no, font=("Segoe UI", 12, "bold"), fg_color="#ef4444", hover_color="#b91c1c", width=120)
+            btn_no = ctk.CTkButton(btn_frame, text="ยกเลิก", command=on_no, font=("Segoe UI", 14, "bold"), fg_color=COLOR_DANGER, hover_color=COLOR_DANGER_HOVER, width=130, height=36, corner_radius=8)
             btn_no.pack(side="right", padx=10, expand=True, anchor="w")
         else:
-            btn_ok = ctk.CTkButton(btn_frame, text="ตกลง", command=on_yes, font=("Segoe UI", 12, "bold"), fg_color=COLOR_PRIMARY, hover_color="#14532d", width=120)
+            btn_ok = ctk.CTkButton(btn_frame, text="ตกลง", command=on_yes, font=("Segoe UI", 14, "bold"), fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER, width=130, height=36, corner_radius=8)
             btn_ok.pack(pady=0)
 
         # Wait for user action
@@ -1079,7 +1575,7 @@ class DPostConverterGUI(ctk.CTk):
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        icon_lbl = ctk.CTkLabel(main_frame, text="✅", font=("Segoe UI", 48), text_color=COLOR_SUCCESS)
+        icon_lbl = ctk.CTkLabel(main_frame, text="", font=("Segoe UI", 48), text_color=COLOR_SUCCESS)
         icon_lbl.pack(pady=(0, 10))
         
         title_lbl = ctk.CTkLabel(main_frame, text="บันทึกไฟล์สำเร็จเรียบร้อยแล้ว!", font=("Segoe UI", 16, "bold"), text_color=COLOR_TEXT_MAIN)
@@ -1091,11 +1587,11 @@ class DPostConverterGUI(ctk.CTk):
         import os
         files_list = []
         if excel_path:
-            files_list.append(f"📊 {os.path.basename(excel_path)}")
+            files_list.append(f"{os.path.basename(excel_path)}")
         if pdf_path:
-            files_list.append(f"📑 {os.path.basename(pdf_path)}")
+            files_list.append(f"{os.path.basename(pdf_path)}")
         if delivery_path:
-            files_list.append(f"📑 {os.path.basename(delivery_path)}")
+            files_list.append(f"{os.path.basename(delivery_path)}")
             
         files_text = "\n".join(files_list)
             
@@ -1165,7 +1661,7 @@ class DPostConverterGUI(ctk.CTk):
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        icon_lbl = ctk.CTkLabel(main_frame, text="🔔", font=("Segoe UI", 48))
+        icon_lbl = ctk.CTkLabel(main_frame, text="ⓘ", font=("Segoe UI", 48))
         icon_lbl.pack(pady=(0, 10))
         
         title_lbl = ctk.CTkLabel(main_frame, text=f"มีโปรแกรมเวอร์ชันใหม่: {latest_version}", font=("Segoe UI", 16, "bold"), text_color=COLOR_PRIMARY)
@@ -1182,7 +1678,7 @@ class DPostConverterGUI(ctk.CTk):
             webbrowser.open(download_url)
             dialog.destroy()
             
-        btn_download = ctk.CTkButton(btn_frame, text="📥 ดาวน์โหลด", command=on_download, fg_color=COLOR_PRIMARY, hover_color="#14532d", font=("Segoe UI", 12, "bold"))
+        btn_download = ctk.CTkButton(btn_frame, text="ดาวน์โหลด", command=on_download, fg_color=COLOR_PRIMARY, hover_color="#14532d", font=("Segoe UI", 12, "bold"))
         btn_download.pack(side="left", padx=10)
         
         btn_cancel = ctk.CTkButton(btn_frame, text="ไว้ทีหลัง", command=dialog.destroy, fg_color="#ef4444", hover_color="#b91c1c", font=("Segoe UI", 12, "bold"))
