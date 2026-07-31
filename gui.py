@@ -89,7 +89,8 @@ class LoginWindow(ctk.CTkToplevel):
         self.lbl_title = ctk.CTkLabel(self.card, text="C2DPost Login", font=("Segoe UI", 28, "bold"), text_color=COLOR_PRIMARY)
         self.lbl_title.pack(pady=(35, 25))
 
-        self.entry_username = ctk.CTkEntry(self.card, placeholder_text="Username", width=280, height=45, font=("Segoe UI", 14), corner_radius=8, border_color=COLOR_BORDER)
+        vcmd = (self.register(self.validate_english), '%P')
+        self.entry_username = ctk.CTkEntry(self.card, placeholder_text="Username", width=280, height=45, font=("Segoe UI", 14), corner_radius=8, border_color=COLOR_BORDER, validate="key", validatecommand=vcmd)
         self.entry_username.pack(pady=(0, 15))
         make_entry_context_menu(self.entry_username._entry)
 
@@ -108,6 +109,21 @@ class LoginWindow(ctk.CTkToplevel):
 
     def on_close(self):
         self.master.destroy()
+
+    def validate_english(self, P):
+        if P == "":
+            if hasattr(self, 'lbl_error'):
+                self.lbl_error.configure(text="")
+            return True
+        import re
+        if re.match(r'^[a-zA-Z]+$', P):
+            if hasattr(self, 'lbl_error'):
+                self.lbl_error.configure(text="")
+            return True
+        else:
+            if hasattr(self, 'lbl_error'):
+                self.lbl_error.configure(text="กรุณากรอกเฉพาะตัวอักษรภาษาอังกฤษเท่านั้น")
+            return False
 
     def login(self):
         username = self.entry_username.get().strip()
