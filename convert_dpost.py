@@ -25,7 +25,7 @@ try:
 except Exception:
     FONT_REGISTERED = False
 
-__version__ = "2026.0731.1735"
+__version__ = "2026.0731.1811"
 
 # Thailand Post API Credentials
 API_KEY = "V9JN25IFH5hdZYc1k8NNRVgnLYXyQLzc"
@@ -53,9 +53,9 @@ def calculate_check_digit(serial_str):
     else:
         return str(11 - remainder)
 
-def fetch_registered_barcodes(cnt):
+def fetch_registered_barcodes(cnt, typ=2):
     """
-    Fetch `cnt` registered barcodes (typ=2) from Thailand Post API.
+    Fetch `cnt` barcodes of type `typ` from Thailand Post API.
     Returns a list of 13-character barcode strings.
     """
     import base64
@@ -72,7 +72,7 @@ def fetch_registered_barcodes(cnt):
     
     try:
         response = requests.get(
-            f"{POSTONE_API_URL}?typ=2&cnt={cnt}",
+            f"{POSTONE_API_URL}?typ={typ}&cnt={cnt}",
             headers=headers,
             timeout=10
         )

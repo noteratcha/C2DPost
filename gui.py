@@ -1147,8 +1147,8 @@ class DPostConverterGUI(ctk.CTk):
         
         # Center the popup
         popup.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 600) // 2
-        y = self.winfo_y() + (self.winfo_height() - 400) // 2
+        x = (self.winfo_screenwidth() - 600) // 2
+        y = (self.winfo_screenheight() - 400) // 2
         popup.geometry(f"+{x}+{y}")
         
         frame = ctk.CTkScrollableFrame(popup, fg_color="transparent")
@@ -1354,10 +1354,23 @@ class DPostConverterGUI(ctk.CTk):
             try:
                 # Fetch barcodes right before exporting
                 num_records = len(self.dataframe)
-                self.lbl_status.configure(text=f"กำลังดึงบาร์โค้ดลงทะเบียนจำนวน {num_records} หมายเลข...")
+                
+                # Check TypeBarcode from user_data
+                barcode_type_str = str(self.user_data.get('TypeBarcode', 'R')).strip().upper()
+                if barcode_type_str == 'EMS':
+                    typ = 1
+                    b_type_desc = "EMS"
+                elif barcode_type_str == 'ECO':
+                    typ = 11
+                    b_type_desc = "eCo-Post"
+                else:
+                    typ = 2 # Registered default
+                    b_type_desc = "ลงทะเบียน (R)"
+                    
+                self.lbl_status.configure(text=f"กำลังดึงบาร์โค้ด {b_type_desc} จำนวน {num_records} หมายเลข...")
                 self.update() # Force UI update
                 
-                barcodes = fetch_registered_barcodes(num_records)
+                barcodes = fetch_registered_barcodes(num_records, typ=typ)
                 if len(barcodes) < num_records:
                     self.show_custom_msgbox("warning", "คำเตือน", "ดึงบาร์โค้ดได้ไม่ครบตามจำนวนข้อมูล")
                 
@@ -1495,8 +1508,8 @@ class DPostConverterGUI(ctk.CTk):
 
         # Center the dialog
         self.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 450) // 2
-        y = self.winfo_y() + (self.winfo_height() - 300) // 2
+        x = (self.winfo_screenwidth() - 450) // 2
+        y = (self.winfo_screenheight() - 300) // 2
         dialog.geometry(f"+{x}+{y}")
 
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -1568,8 +1581,8 @@ class DPostConverterGUI(ctk.CTk):
         
         # Center the dialog
         self.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 450) // 2
-        y = self.winfo_y() + (self.winfo_height() - 300) // 2
+        x = (self.winfo_screenwidth() - 450) // 2
+        y = (self.winfo_screenheight() - 300) // 2
         dialog.geometry(f"+{x}+{y}")
         
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -1654,8 +1667,8 @@ class DPostConverterGUI(ctk.CTk):
         dialog.grab_set()
         
         self.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 450) // 2
-        y = self.winfo_y() + (self.winfo_height() - 250) // 2
+        x = (self.winfo_screenwidth() - 450) // 2
+        y = (self.winfo_screenheight() - 250) // 2
         dialog.geometry(f"+{x}+{y}")
         
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
