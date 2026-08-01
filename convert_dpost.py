@@ -25,7 +25,7 @@ try:
 except Exception:
     FONT_REGISTERED = False
 
-__version__ = "2026.0731.1820"
+__version__ = "2026.0802.0241"
 
 # Thailand Post API Credentials
 API_KEY = "V9JN25IFH5hdZYc1k8NNRVgnLYXyQLzc"
